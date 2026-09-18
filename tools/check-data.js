@@ -29,8 +29,26 @@ const warnings = [];
 const { TRIP_POI: POI } = load('data/poi.js');
 const { TRIP_ITINERARY: ITIN } = load('data/itinerary.js');
 const { TRIP_ROUTES: ROUTES } = load('data/routes-legs.js');
+const { TRIP_CONFIG: CFG } = load('config.js');
 
 const MODES = ['driving', 'transit', 'walking'];
+
+/* 0：每日主题色的取色前提
+   颜色是按「第几天」的下标取的（CFG.dayHue），所以只要天数不超过调色板长度、
+   且每天的 id 是 dayN，取色就不会错位。这两条以前都没人守：
+   加到第 5 天不会有任何报错，只是第 5 天静默用了第 1 天的颜色。 */
+const PALETTE = CFG.DAY_HUE;
+if (ITIN.days.length > PALETTE.length) {
+  errors.push(
+    `行程有 ${ITIN.days.length} 天，但 config.js 的 DAY_HUE 只有 ${PALETTE.length} 色；` +
+      `多出来的天会回绕复用前面的颜色`
+  );
+}
+ITIN.days.forEach((day, i) => {
+  if (day.id !== `day${i + 1}`) {
+    errors.push(`第 ${i + 1} 天的 id 是「${day.id}」，应为「day${i + 1}」（颜色与路线段都按这个口径关联）`);
+  }
+});
 
 /* 1 + 2：POI 完整性与坐标 */
 for (const day of ITIN.days) {

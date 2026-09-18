@@ -1,0 +1,235 @@
+/* ============================================================
+   行程编辑模式
+
+   编辑态的东西只在编辑态出现 —— 平时看行程时，卡片上不该多出三个按钮。
+   所以下面的选择器都挂在 .stop__edit / .timeline__add 这些只在编辑模式
+   才会被渲染出来的节点上，不需要额外的全局开关类。
+   ============================================================ */
+
+/* ---------------- 顶栏入口 ---------------- */
+
+.edit-open {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px 5px 11px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--text-mid);
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-1);
+  white-space: nowrap;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+.edit-open:hover {
+  color: var(--gold-ink);
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+
+.edit-open svg {
+  opacity: 0.85;
+}
+
+/* 编辑中：按钮实心，一眼能看出「现在是编辑态」——
+   否则用户会奇怪为什么卡片上多了一排按钮 */
+.edit-open.is-on {
+  color: var(--paper-0);
+  border-color: var(--gold-ink);
+  background: var(--gold-ink);
+}
+
+/* ---------------- 卡片上的操作条 ---------------- */
+
+.stop__edit {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.stop__editbtn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper-1);
+  color: var(--text-lo);
+  font-size: 12px;
+  line-height: 1;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+
+.stop__editbtn:hover {
+  color: var(--gold-ink);
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+
+.stop__editbtn.is-danger:hover {
+  color: var(--cinnabar);
+  border-color: color-mix(in srgb, var(--cinnabar) 45%, transparent);
+  background: color-mix(in srgb, var(--cinnabar) 8%, transparent);
+}
+
+/* 时间点就地可改。做得跟静态的 .stop__time 尽量像，
+   免得一进编辑模式整张卡片跳版。
+   宽度要放得下「HH:MM + 浏览器自带的时间图标」——
+   78px 时实测会被截成「09:」。 */
+.stop__time--edit {
+  width: 116px;
+  padding: 3px 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--paper-1);
+  color: var(--gold-ink);
+  font-size: 17px;
+  outline: none;
+}
+
+/* Chrome 给时间控件内部那层单独设过字色，不显式继承就还是黑的 */
+.stop__time--edit::-webkit-datetime-edit {
+  color: var(--gold-ink);
+}
+
+.stop__time--edit:focus {
+  border-color: var(--gold-ink);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+/* ---------------- 末尾的添加入口 ---------------- */
+
+.timeline__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-lo);
+  font-size: 12.5px;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+.timeline__add:hover {
+  color: var(--gold-ink);
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+
+.timeline__add-plus {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ---------------- 候选景点面板 ---------------- */
+
+.picker__search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--paper-1);
+  color: var(--text-hi);
+  font: inherit;
+  outline: none;
+}
+
+.picker__search:focus {
+  border-color: var(--gold-ink);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.picker__hint {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-lo);
+}
+
+.picker__list {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.picker__row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper-0);
+  transition: border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+
+.picker__row:hover:not(:disabled) {
+  border-color: var(--gold-line);
+  background: var(--paper-1);
+}
+
+.picker__row:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.picker__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.picker__name {
+  font-size: 13.5px;
+  color: var(--text-hi);
+}
+
+.picker__tag {
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  color: var(--gold-ink);
+  border: 1px solid var(--gold-line);
+  background: var(--gold-soft);
+}
+
+.picker__tag.is-added {
+  color: var(--text-lo);
+  border-color: var(--rule-strong);
+  background: var(--paper-2);
+}
+
+.picker__kind {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.picker__addr {
+  font-size: 11.5px;
+  color: var(--text-lo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker__empty {
+  margin: 18px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-lo);
+}

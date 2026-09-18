@@ -1,0 +1,109 @@
+/* ============================================================
+   共用表单控件：选项胶囊组 + 天数提示
+
+   行程页的规划弹层与首页表单都用这一份；放在 planner.css 里的话
+   首页就得复制一遍，改一处忘一处。
+   ============================================================ */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.chips__title {
+  /* 标题独占一行，胶囊从第二行开始 */
+  flex-basis: 100%;
+  margin-bottom: 1px;
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+.chips__title em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.chips label {
+  display: inline-flex;
+  gap: 0;
+  cursor: pointer;
+}
+
+/* 原生控件不能 display:none —— 那会把键盘焦点和读屏一起干掉。
+   用绝对定位挪出可视区，它仍在 tab 序列里、也仍能触发 :focus-visible。 */
+.chips input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* 必须限定到 label 里的 span：组标题也是 span，
+   写成 `.chips span` 会把标题也套成一颗胶囊 */
+.chips label > span {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 99px;
+  background: var(--paper-1);
+  color: var(--text-mid);
+  font-size: 12px;
+  line-height: 1.4;
+  transition: border-color 0.16s var(--ease), background 0.16s var(--ease), color 0.16s var(--ease);
+}
+
+.chips label:hover > span {
+  border-color: var(--gold-line);
+  color: var(--text-hi);
+}
+
+.chips input:checked + span {
+  border-color: var(--gold-ink);
+  background: var(--gold-soft);
+  color: var(--gold-ink);
+}
+
+.chips input:focus-visible + span {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+/* ---------- 天数提示：日期一变就重画，色块数量 = 行程天数 ----------
+   色块用的就是 config.js 里当天真实的主题色，所以这行既是提示，
+   也是「任意天数都有对应配色」这件事的可视化。 */
+
+.dayhint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: -2px 0 0;
+  font-size: 12px;
+  color: var(--text-lo);
+}
+
+.dayhint__range {
+  color: var(--text-mid);
+}
+
+.dayhint__count {
+  color: var(--gold-ink);
+}
+
+.dayhint__bad {
+  color: var(--cinnabar);
+}
+
+.dayhint__chips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dayhint__chips i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}

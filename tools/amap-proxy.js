@@ -14,12 +14,14 @@
 
 'use strict';
 
-/** 只放行前端真正会调的四个接口 */
+/** 只放行前端真正会调的接口 */
 const ALLOWED = new Set([
   '/v3/direction/driving',
   '/v3/direction/walking',
   '/v3/direction/transit/integrated',
-  '/v3/weather/weatherInfo'
+  '/v3/weather/weatherInfo',
+  // 首页在表单里选好城市后要先把地图飞过去，需要一次正地理编码
+  '/v3/geocode/geo'
 ]);
 
 const UPSTREAM = 'https://restapi.amap.com';

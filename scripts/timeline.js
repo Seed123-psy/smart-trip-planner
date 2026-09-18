@@ -144,14 +144,57 @@
     return `${from.name} → ${to.name}`;
   }
 
-  function renderStop(day, stop, { onSelect }) {
+  /**
+   * 编辑模式下每个点右侧的操作条。
+   * 用「上移/下移/删除」而不是拖拽：触屏上拖拽和页面滚动打架，
+   * 而一天也就五六个点，点两下比拖一次还快。
+   */
+  function renderEditBar(visitIndex, edit) {
+    const bar = el('div', 'stop__edit');
+    const make = (label, title, danger, fn) => {
+      const btn = el('button', `stop__editbtn${danger ? ' is-danger' : ''}`, label);
+      btn.type = 'button';
+      btn.title = title;
+      btn.setAttribute('aria-label', title);
+      // 卡片整体是可点击的（点了地图定位），操作按钮不能顺带触发它
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fn();
+      });
+      return btn;
+    };
+    bar.append(
+      make('↑', '上移', false, () => edit.onMove(visitIndex, -1)),
+      make('↓', '下移', false, () => edit.onMove(visitIndex, 1)),
+      make('✕', '删除这个点', true, () => edit.onRemove(visitIndex))
+    );
+    return bar;
+  }
+
+  /** 时间点就地可改：做成 time 输入框，省得再弹一层 */
+  function renderTimeField(visit, visitIndex, edit) {
+    const input = document.createElement('input');
+    input.type = 'time';
+    input.className = 'stop__time stop__time--edit num';
+    input.value = /^\d{2}:\d{2}/.test(visit.time || '') ? visit.time.slice(0, 5) : '10:00';
+    input.setAttribute('aria-label', '修改时间');
+    input.addEventListener('click', (e) => e.stopPropagation());
+    // 下标必须一起传回去：只有值的话，回调那边不知道改的是哪个点
+    input.addEventListener('change', () => edit.onTime(visitIndex, input.value));
+    return input;
+  }
+
+  function renderStop(day, stop, { onSelect, edit }) {
     const poi = POI[stop.poiId];
     const visit = stop.visit;
     const card = el('div', 'stop__card');
 
     const head = el('div', 'stop__head');
-    head.append(el('span', 'stop__time num', visit.time || '—'));
+    head.append(
+      edit ? renderTimeField(visit, stop.visitIndex, edit) : el('span', 'stop__time num', visit.time || '—')
+    );
     head.append(el('h3', 'stop__title', visit.title || poi.name));
+    if (edit) head.append(renderEditBar(stop.visitIndex, edit));
     // 状态徽标优先级：闭馆提醒（会导致白跑）> 必玩点 > 停留时长
     const badges = [];
     if (visit.closed) {
@@ -258,7 +301,7 @@
    * @param {object} ctx { day, onSelect }
    */
   function renderDay(ctx) {
-    const { day, onSelect } = ctx;
+    const { day, onSelect, edit } = ctx;
     const stops = resolveStops(day);
     const frag = document.createDocumentFragment();
 
@@ -277,7 +320,7 @@
           const leg = legFrom(day, stops[cursor - 1]);
           if (leg) timeline.append(renderLeg(leg, { advice: visit.advice }));
         }
-        timeline.append(renderStop(day, stop, { onSelect: onSelect || (() => {}) }));
+        timeline.append(renderStop(day, stop, { onSelect: onSelect || (() => {}), edit }));
         cursor++;
         return;
       }
@@ -287,6 +330,20 @@
     });
 
     frag.append(timeline);
+
+    // 编辑模式：这一天末尾给一个入口，点开候选面板挑点加进来。
+    // 放在末尾而不是每个缝隙都插一个「+」，是为了少几个可点的目标 ——
+    // 加进来再上移，比瞄准「插在第 3 个点之后」轻松得多。
+    if (edit) {
+      const add = el('button', 'timeline__add');
+      add.type = 'button';
+      add.append(
+        el('span', 'timeline__add-plus', '＋'),
+        el('span', null, `往 ${day.label} 加个景点`)
+      );
+      add.addEventListener('click', () => edit.onAdd());
+      frag.append(add);
+    }
 
     const toPlan = day.visits.filter((v) => v.pending).length;
     const unlocated = day.visits.filter(
@@ -361,8 +418,75 @@
     });
   }
 
+  /* ------------------------------------------------------------------ */
+  /* 全旅程总览                                                          */
+  /* ------------------------------------------------------------------ */
+
+  /** 某天的点数与合计路程 / 在途时间。与单日统计同一口径（只取每段自己推荐的方式） */
+  function dayTotals(day) {
+    const stops = resolveStops(day);
+    const legs = stops.map((stop) => legFrom(day, stop)).filter(Boolean);
+    const pick = (leg) => leg.modes[leg.primary] || {};
+    return {
+      stops: stops.length,
+      distance: legs.reduce((sum, leg) => sum + (pick(leg).distance || 0), 0),
+      duration: legs.reduce((sum, leg) => sum + (pick(leg).duration || 0), 0)
+    };
+  }
+
+  /**
+   * 总览面板：每天一张卡，点进去看那一天。
+   *
+   * 存在的理由：用户刚在首页看着几天的路线一起长出来，进到行程页
+   * 如果直接砸在某一天的细节里，那个画面就断了。先给全貌，
+   * 让他自己决定看哪天 —— 也顺便先把「这一趟总共要走多远」交代清楚。
+   *
+   * @param {{days: Array, onSelectDay: Function}} ctx
+   * @returns {{fragment: DocumentFragment, totals: Array}}
+   */
+  function renderTripSummary(ctx) {
+    const { days, onSelectDay } = ctx;
+    const totals = days.map(dayTotals);
+    const frag = document.createDocumentFragment();
+    const list = el('div', 'daysum');
+
+    days.forEach((day, i) => {
+      const t = totals[i];
+      const dist = formatDistance(t.distance);
+
+      const card = el('button', 'daysum__card');
+      card.type = 'button';
+      card.style.setProperty('--day-hue', CFG.dayHue(i));
+
+      const head = el('div', 'daysum__head');
+      const label = el('span', 'daysum__label');
+      label.append(el('span', 'daysum__dot'), document.createTextNode(day.label));
+      head.append(label, el('span', 'daysum__date', day.dateText));
+
+      const title = el('h3', 'daysum__title', day.title);
+      const meta = el('div', 'daysum__meta');
+      meta.append(
+        el('span', 'daysum__num num', String(t.stops)),
+        el('span', null, '个点'),
+        el('span', 'daysum__sep', '·'),
+        el('span', 'daysum__num num', `${dist.value} ${dist.unit}`),
+        el('span', 'daysum__sep', '·'),
+        el('span', null, formatDuration(t.duration))
+      );
+
+      card.append(head, title, meta);
+      card.addEventListener('click', () => onSelectDay(i));
+      list.append(card);
+    });
+
+    frag.append(list);
+    return { fragment: frag, totals };
+  }
+
   window.TripTimeline = {
     renderDay,
+    renderTripSummary,
+    dayTotals,
     paintBars,
     resolveStops,
     formatDistance,

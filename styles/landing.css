@@ -1,0 +1,707 @@
+/* ============================================================
+   首页：素纸手账的封面
+
+   视觉方向与行程页同源（见 base.css 的设计令牌），不引入任何新色相：
+   暖白纸面、暖墨字、古铜描边、朱砂只做「一处」重音（印章与当前阶段）。
+   首页与行程页之间的切换不该有色差，所以这里一个硬编码色值都不写，
+   全部走 var(--*)；需要新色阶就用 color-mix 从既有令牌推。
+
+   构图：底图铺满做「纸」，墨绘层是「画」，左侧文案压一层渐变纸浆，
+   七阶段管线条压底。文字区刻意不与底图对齐成方块 —— 斜向的纸浆边界
+   让两张图层看起来是一体的，而不是「地图上贴了一张卡片」。
+   ============================================================ */
+
+/* 抽屉宽度只此一份：.sheet 用它定宽，.stage 用它算让位量。
+   两处各写一个 520px 的话，改宽度就会有一边对不上。 */
+.landing {
+  --sheet-w: min(520px, 100%);
+  overflow: hidden;
+}
+
+/* 满屏不滚动：首页是一屏构图，滚动会破坏「一张纸」的完整感 */
+
+.stage {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper-1);
+  transition: margin-right 0.34s var(--ease);
+}
+
+/* 抽屉打开时主视觉整体让位，而不是被盖住。
+   底部的七阶段管线马上要变成真实的进度指示器 —— 被抽屉压掉两格就没意义了。
+   文案同步淡出：收窄之后它和墨迹会挤在一起，而此时用户的注意力在表单上。 */
+.landing.is-sheet-open .stage {
+  margin-right: var(--sheet-w);
+}
+
+.landing.is-sheet-open .copy {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
+}
+
+/* ---------------- 底图与纸面 ---------------- */
+
+.stage__map,
+.stage__ink,
+.stage__veil,
+.stage__grain {
+  position: absolute;
+  inset: 0;
+}
+
+/* 去饱和 + 极轻的暖化，把高德的冷灰底图调成「淡墨纸」。
+   幅度必须保守：whitesmoke 本来就是浅灰底，再叠 brightness 就只剩一片白，
+   路网彻底消失，墨线也就失去了依附的骨架。这里宁可偏重一点。 */
+.stage__map {
+  filter: grayscale(0.86) sepia(0.3) contrast(1.05) brightness(0.96);
+  opacity: 0;
+  transition: opacity 1.2s var(--ease);
+  /* 禁用交互靠 CSS 而不是 map.setStatus：
+     后者连程序化的缩放也会一起禁掉，取景就全废了 */
+  pointer-events: none;
+}
+
+.stage__map.is-ready {
+  opacity: 1;
+}
+
+/* 无底图时的兜底纸面：等高线似的细弧 + 纸色，保证墨绘永远有背景 */
+.stage.is-fallback {
+  background:
+    repeating-radial-gradient(
+      circle at 72% 46%,
+      transparent 0 46px,
+      color-mix(in srgb, var(--rule) 60%, transparent) 46px 47px
+    ),
+    radial-gradient(120% 80% at 20% 10%, color-mix(in srgb, var(--gold) 7%, transparent), transparent 60%),
+    var(--paper-1);
+}
+
+/* 三块蒙版各司其职，谁都别越界：
+   ① 左侧一条纸浆，给文案一个能站住的面，到一半就化没 —— 它不该盖住底图主体
+   ② 底部一条，压住七阶段管线的背景
+   ③ 四周轻微收边，中心不动，把视线拢到墨迹上
+   上一版把这三块的强度都调过了头，整页只剩白。 */
+.stage__veil {
+  background:
+    linear-gradient(100deg, var(--paper-1) 0%, color-mix(in srgb, var(--paper-1) 86%, transparent) 24%, transparent 56%),
+    linear-gradient(to top, color-mix(in srgb, var(--paper-1) 80%, transparent) 0%, transparent 17%),
+    radial-gradient(130% 110% at 54% 46%, transparent 54%, color-mix(in srgb, var(--paper-3) 38%, transparent) 100%);
+  pointer-events: none;
+}
+
+/* 颗粒：SVG 噪声，低到只在浅色大面上垫出纸的触感 */
+.stage__grain {
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.stage__ink {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  transition: opacity 0.34s var(--ease);
+}
+
+/* ---------------- 顶栏 ---------------- */
+
+.topbar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26px 34px;
+}
+
+.topbar__mark {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: var(--text-hi);
+}
+
+.topbar__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid transparent;
+  font-size: 12.5px;
+  color: var(--text-mid);
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.topbar__link:hover {
+  color: var(--gold-ink);
+  border-bottom-color: var(--gold-line);
+}
+
+/* ---------------- 文案 ---------------- */
+
+.copy {
+  position: absolute;
+  z-index: 2;
+  left: clamp(34px, 6vw, 96px);
+  top: 50%;
+  /* 写 px/vw，不能写 em：em 按 .copy 自己的 14px 字号算，30em 只有 420px，
+     标题会被挤成三行（"交给四个" / "Agent" 各占一行） */
+  width: min(600px, 48vw);
+  transform: translateY(-50%);
+}
+
+.copy__eyebrow {
+  margin: 0 0 22px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--gold-ink);
+}
+
+.copy__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(38px, 4.6vw, 64px);
+  line-height: 1.16;
+  letter-spacing: 0.01em;
+  /* 墨色起、古铜收，和行程页的城市标题同一手法 */
+  background: linear-gradient(158deg, var(--text-hi) 30%, var(--gold-bright) 132%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.copy__sub {
+  margin: 24px 0 0;
+  max-width: 26em;
+  font-size: 14px;
+  line-height: 2;
+  color: var(--text-mid);
+}
+
+.copy__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 38px;
+}
+
+/* ---------------- 按钮 ---------------- */
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 24px;
+  border-radius: 99px;
+  border: 1px solid var(--text-hi);
+  background: var(--text-hi);
+  color: var(--paper-0);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+
+.cta .ic {
+  transition: transform 0.24s var(--ease);
+}
+
+.cta:hover {
+  background: var(--gold-ink);
+  border-color: var(--gold-ink);
+  transform: translateY(-1px);
+}
+
+.cta:hover .ic {
+  transform: translateX(3px);
+}
+
+.cta--ghost {
+  background: transparent;
+  border-color: var(--rule-strong);
+  color: var(--text-mid);
+}
+
+.cta--ghost:hover {
+  background: var(--paper-0);
+  border-color: var(--gold-line);
+  color: var(--gold-ink);
+}
+
+/* ---------------- 七阶段管线 ---------------- */
+
+.pipeline {
+  position: absolute;
+  z-index: 3;
+  inset: auto 0 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0 clamp(34px, 6vw, 96px);
+  list-style: none;
+  border-top: 1px solid var(--rule);
+  background: linear-gradient(to top, color-mix(in srgb, var(--paper-1) 92%, transparent), transparent);
+}
+
+/* 条首的说明。没有它，这条会动的管线很容易被当成「正在进行的进度」；
+   写明白是「工作方式」，它才是一句介绍而不是一句谎话。 */
+.pipeline__caption {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-right: clamp(16px, 2.4vw, 38px);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  color: var(--text-lo);
+}
+
+.pipeline__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 19px 0;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-lo);
+  transition: color 0.3s var(--ease);
+}
+
+/* 阶段之间用一根发丝线相连，像手账里的分隔栏。
+   分叉里的上下两行不画 —— 它们不是先后关系，画竖线会读成「接着」。 */
+.pipeline__item + .pipeline__item::before {
+  content: '';
+  flex: none;
+  width: 1px;
+  height: 13px;
+  margin: 0 clamp(12px, 1.6vw, 26px) 0 0;
+  background: var(--rule-strong);
+}
+
+.pipeline__branches .pipeline__item::before {
+  content: none;
+}
+
+/* ---------------- 并行分叉 ----------------
+   末尾两个阶段是同时开始的，画成上下两行、共用一个左侧虚线括号。
+   沿用一个「先后排列」的条，用户会以为它们一前一后 —— 那就是在说假话。 */
+
+.pipeline__fork {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: clamp(12px, 1.6vw, 26px);
+  padding-left: clamp(10px, 1.2vw, 18px);
+  /* 虚线而不是实线：这是「同时开始」的分叉，不是又一个阶段 */
+  border-left: 1px dashed var(--rule-strong);
+}
+
+/* 竖排的「并行」。用 writing-mode 而不是旋转 —— 不用跟 transform-origin 较劲 */
+.pipeline__fork-label {
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-lo);
+}
+
+.pipeline__branches {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* 两行共用一个序号位：动画里它们会同时亮，动效上也说一遍「一起跑的」 */
+.pipeline__item.is-branch {
+  flex: none;
+  padding: 0;
+}
+
+/* 序号做成小方章：空章是描边，进行中/完成才落朱砂 ——
+   朱砂在整页只出现在这里和墨绘的印章上，所以它一出现就是「看这里」 */
+.pipeline__num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1;
+  transition: border-color 0.3s var(--ease), background 0.3s var(--ease), color 0.3s var(--ease);
+}
+
+.pipeline__label {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* idle：小方章依次落一遍朱砂，把「接力」这件事在视觉上说清楚。
+   每个方章同一周期、只错开相位，所以循环起来永远保持这个先后顺序 */
+.pipeline__num {
+  animation: pipeline-seal 9s var(--ease) infinite;
+  animation-delay: calc(var(--i) * 0.42s);
+}
+
+@keyframes pipeline-seal {
+  0%, 12% {
+    border-color: var(--cinnabar);
+    background: var(--cinnabar);
+    color: var(--paper-0);
+  }
+  13%, 100% {
+    border-color: var(--rule-strong);
+    background: transparent;
+    color: inherit;
+  }
+}
+
+/* 真正规划时由 JS 打上 is-done / is-active，先停掉 idle 的自动呼吸 */
+.pipeline.is-live .pipeline__num {
+  animation: none;
+}
+
+/* 三态用三套颜色，避免「已完成」和「还没到」在小方章上分不出来：
+   描边 = 未到 · 古铜 = 已完成 · 朱砂 = 进行中。
+   三个颜色都取自既有令牌，不引入新色相。 */
+.pipeline__item.is-done {
+  color: var(--text-mid);
+}
+
+/* 完成的填充比 --gold-soft 再重一档：9% 透明度在 21px 的小方章上几乎看不见，
+   和「未到」的空描边分不出来。层级仍然是「进行中(朱砂) > 已完成(古铜) > 未到(描边)」。 */
+.pipeline__item.is-done .pipeline__num {
+  border-color: var(--gold-line);
+  background: color-mix(in srgb, var(--gold) 17%, var(--paper-0));
+  color: var(--gold-ink);
+}
+
+.pipeline__item.is-active {
+  color: var(--text-hi);
+}
+
+.pipeline__item.is-active .pipeline__num {
+  border-color: var(--cinnabar);
+  background: var(--cinnabar);
+  color: var(--paper-0);
+}
+
+/* 当前阶段加一圈呼吸，明确「就是这一步在跑」 */
+.pipeline__item.is-active .pipeline__num {
+  animation: pipeline-live 1.6s var(--ease) infinite;
+}
+
+@keyframes pipeline-live {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cinnabar) 45%, transparent); }
+  60% { box-shadow: 0 0 0 7px transparent; }
+}
+
+/* 跳过 ≠ 完成：审校可能因为时间预算不足没跑，界面上要能分辨。
+   虚线框 + 明写「跳过」，而不是让它混在「已完成」里。 */
+.pipeline__item.is-skipped .pipeline__num {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-lo);
+}
+
+.pipeline__item.is-skipped .pipeline__label::after {
+  content: '· 跳过';
+  color: var(--text-lo);
+}
+
+/* ---------------- 规划抽屉 ---------------- */
+
+.sheet {
+  position: fixed;
+  z-index: 20;
+  inset: 0 0 0 auto;
+  width: var(--sheet-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-0);
+  border-left: 1px solid var(--rule);
+  box-shadow: -20px 0 60px -30px rgba(38, 33, 26, 0.5);
+  animation: sheet-in 0.34s var(--ease) both;
+  overflow: hidden;
+}
+
+.sheet[hidden] {
+  display: none;
+}
+
+@keyframes sheet-in {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.sheet__head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sheet__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--gold-ink);
+}
+
+.sheet__title {
+  margin: 5px 0 0;
+  font-family: var(--font-display);
+  font-size: 23px;
+}
+
+.sheet__close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: var(--paper-1);
+  color: var(--text-lo);
+}
+
+.sheet__close:hover {
+  color: var(--text-hi);
+  border-color: var(--rule-strong);
+}
+
+.sheet__form {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 15px;
+  padding: 22px 26px 26px;
+}
+
+.sheet__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.sheet input,
+.sheet textarea,
+.sheet select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--paper-1);
+  color: var(--text-hi);
+  font: inherit;
+  outline: none;
+}
+
+.sheet textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.sheet input:focus,
+.sheet textarea:focus,
+.sheet select:focus {
+  border-color: var(--gold-ink);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.sheet__actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px -26px -26px;
+  padding: 14px 26px 18px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper-0);
+}
+
+.sheet__status {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-lo);
+}
+
+.sheet__status.is-error {
+  color: var(--cinnabar);
+}
+
+.sheet__submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 6px;
+  background: var(--text-hi);
+  color: var(--paper-0);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sheet__submit:hover {
+  background: var(--gold-ink);
+}
+
+.sheet__submit .spinner {
+  display: none;
+}
+
+.sheet__submit.is-loading {
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.sheet__submit.is-loading .spinner {
+  display: block;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: var(--paper-0);
+}
+
+/* ---------------- 入场：一条错峰的显影 ---------------- */
+
+.copy__eyebrow,
+.copy__title,
+.copy__sub,
+.copy__actions,
+.topbar,
+.pipeline {
+  animation: rise 0.7s var(--ease) both;
+}
+
+.copy__eyebrow { animation-delay: 0.05s; }
+.copy__title { animation-delay: 0.13s; }
+.copy__sub { animation-delay: 0.24s; }
+.copy__actions { animation-delay: 0.34s; }
+.topbar { animation-delay: 0.44s; }
+.pipeline { animation-delay: 0.5s; }
+
+/* ---------------- 窄屏 ---------------- */
+
+@media (max-width: 900px) {
+  /* 窄屏不做「文案在上、地图在下」的纵向堆叠：底图是铺满整屏的背景，
+     一旦让 .stage 长高，绝对定位的底图会跟着变高，墨迹就被推到屏幕外，
+     文案下面只剩一大片空白。这里保持满屏，改用「文案压顶、管线压底」。 */
+
+  /* 窄屏的抽屉是从底部升起的近全屏面板，不存在「并排」这回事，
+     所以不做让位：让了也没地方放，还会把地图挤成一条 */
+  .landing.is-sheet-open .stage {
+    margin-right: 0;
+  }
+
+  .landing.is-sheet-open .copy {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .topbar {
+    padding: 18px 20px;
+  }
+
+  .copy {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    top: 88px;
+    width: auto;
+    transform: none;
+  }
+
+  .copy__eyebrow {
+    margin-bottom: 14px;
+    letter-spacing: 0.22em;
+  }
+
+  .copy__title {
+    font-size: clamp(30px, 8.8vw, 42px);
+  }
+
+  .copy__sub {
+    margin-top: 16px;
+    font-size: 13px;
+    line-height: 1.9;
+  }
+
+  .copy__actions {
+    margin-top: 24px;
+  }
+
+  .cta {
+    padding: 11px 19px;
+    font-size: 13px;
+  }
+
+  /* 五个阶段横向排不下，改成可横滑；说明去掉，窄屏没这个位置。
+     右缘渐隐是必要的：没有它，被截断的「五 高德算路」看起来像是排坏了 */
+  .pipeline {
+    padding: 0 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 30px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 30px), transparent 100%);
+  }
+
+  .pipeline::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pipeline__caption {
+    display: none;
+  }
+
+  .pipeline__item {
+    flex: none;
+    padding: 15px 0;
+  }
+
+  .pipeline__item + .pipeline__item::before {
+    margin-right: 14px;
+  }
+
+  /* 抽屉改成从底部升起：窄屏下侧滑会把本来就窄的视野再切一刀 */
+  .sheet {
+    inset: auto 0 0 0;
+    width: auto;
+    max-height: 92dvh;
+    border-left: none;
+    border-top: 1px solid var(--rule);
+    animation: sheet-up 0.32s var(--ease) both;
+  }
+
+  @keyframes sheet-up {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+}

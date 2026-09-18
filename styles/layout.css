@@ -27,12 +27,44 @@
 
 /* 左：城市 + 日期，衬线大字，视觉锚点 */
 .band__brand {
-  flex: none;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding-right: 28px;
-  border-right: 1px solid var(--rule);
+}
+
+/* 「全部」标签不归属任何一天，用古铜而不是某天的主题色 ——
+   否则看着像「第 N 天」，跟旁边的 Day 1 混在一起 */
+.daytab--all {
+  --day-hue: var(--gold-ink);
+}
+
+.daytab--all .daytab__dot {
+  /* 空心点：和实心的「某一天」区分开 */
+  background: transparent;
+  border: 2px solid var(--gold-ink);
+  box-shadow: none;
+}
+
+/* 回首页。base.css 给 a 加了金色下划线，这里要压掉换成胶囊描边 */
+.band__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px 5px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 99px;
+  background: var(--paper-1);
+  color: var(--text-lo);
+  font-size: 12px;
+  white-space: nowrap;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.band__back:hover {
+  color: var(--gold-ink);
+  border-color: var(--gold-line);
+  background: var(--paper-0);
 }
 
 .band__city {
@@ -42,6 +74,9 @@
   letter-spacing: 0.14em;
   margin: 0;
   line-height: 1;
+  /* 城市名是两个汉字，一旦行内挤不下就会折成竖排，看起来像排版坏了。
+     宁可让它把旁边挤走，也不要换行。 */
+  white-space: nowrap;
   /* 墨色起、古铜收，和白纸形成「题字」的观感 */
   background: linear-gradient(158deg, var(--text-hi) 34%, var(--gold-bright) 128%);
   -webkit-background-clip: text;
@@ -82,83 +117,6 @@
   white-space: nowrap;
 }
 
-/* 中：三个锚点卡片（抵达 / 住宿 / 返程） */
-.band__anchors {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px 0;
-}
-
-.anchor {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--rule);
-  background: var(--paper-1);
-  min-width: 0;
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
-}
-
-.anchor:hover {
-  border-color: var(--gold-line);
-  background: var(--paper-0);
-}
-
-.anchor__icon {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--gold-soft);
-  color: var(--gold-ink);
-}
-
-.anchor__body {
-  min-width: 0;
-}
-
-.anchor__head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.anchor__label {
-  font-size: 11px;
-  color: var(--text-lo);
-  letter-spacing: 0.1em;
-}
-
-.anchor__time {
-  font-family: var(--font-num);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--gold-ink);
-  line-height: 1;
-}
-
-.anchor__place {
-  font-size: 13px;
-  color: var(--text-hi);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.anchor__note {
-  font-size: 11px;
-  color: var(--text-lo);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ---------------- 日切换标签 ---------------- */
 
 .daybar {
@@ -171,6 +129,10 @@
   border-bottom: 1px solid var(--rule);
   overflow-x: auto;
   scrollbar-width: none;
+  /* 天数多的时候标签会排不下、需要横滑。没有这个渐隐，被截断的标签
+     看起来像是排版坏了；有了它，一眼就知道右边还有。与首页管线同一手法。 */
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 34px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 34px), transparent 100%);
 }
 
 .daybar::-webkit-scrollbar {
@@ -540,16 +502,6 @@
   }
 }
 
-@media (max-width: 1180px) {
-  .band__anchors {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .band__anchors .anchor:last-child {
-    display: none;
-  }
-}
-
 @media (max-width: 900px) {
   body {
     overflow: auto;
@@ -567,26 +519,25 @@
   }
 
   .band__brand {
-    /* 窄屏下品牌区独占一行并允许收缩：
-       否则 flex:none + 不换行的标签会把页面撑出横向滚动条 */
+    /* 窄屏下品牌区独占一行并允许收缩，
+       否则不换行的标签会把页面撑出横向滚动条 */
     flex: 1 1 100%;
     min-width: 0;
-    padding-right: 0;
-    border-right: none;
   }
 
   .band__meta {
     min-width: 0;
   }
 
-  .band__anchors {
-    flex-basis: 100%;
-    grid-template-columns: 1fr;
-    padding: 0;
+  /* 窄屏顶栏要塞下：返回、城市、日期、标签、天气、两个按钮。
+     城市名与日期各让一档，才不至于把「武汉」挤成竖排。 */
+  .band__city {
+    font-size: 26px;
+    letter-spacing: 0.08em;
   }
 
-  .band__anchors .anchor:last-child {
-    display: flex;
+  .band__dates {
+    font-size: 17px;
   }
 
   .body {

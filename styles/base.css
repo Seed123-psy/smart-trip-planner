@@ -35,12 +35,8 @@
   /* 路途语义色：交通连接段的耗时、距离条。刻意与「时刻」的古铜分开 */
   --travel: #0b7a5f;
 
-  /* 每日主题色。地图侧同名的 DAY_HUE 在 config.js，改色记得一起改 */
-  --day1: #b07510;
-  --day2: #0b7a5f;
-  --day3: #a3377a;
-  --day4: #2a5fc4;
-  --day-active: var(--day1);
+  /* 每日主题色不在这里：调色板随天数长度变化，唯一色源是 config.js 的 DAY_HUE，
+     由 JS 按「第几天」取好之后内联写成 --day-hue，样式表只消费这个变量。 */
 
   /* 字体 */
   --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
@@ -149,6 +145,37 @@ a {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(38, 33, 26, 0.3);
   background-clip: content-box;
+}
+
+/* ---------- 翻页：纸面淡入淡出 ----------
+   首页那幅「几天路线一起画出来」的画面，和行程页的底图风格并不一样
+   （前者是暖化的淡墨纸，后者是中性底图）。直接跳过去就是硬切一刀，
+   中间垫一层纸色淡入淡出，读起来就是「翻过一页」，而不是换了个网站。
+
+   从首页过来才铺：直接打开 trip.html 时铺一下会白闪，
+   所以 class 由 <head> 里的内联脚本按时间戳决定。 */
+.pageveil {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  background: var(--paper-1);
+  opacity: 0;
+  transition: opacity 0.42s var(--ease);
+}
+
+/* 首页：跳转前往纸色收 */
+.landing.is-leaving .pageveil {
+  opacity: 1;
+}
+
+/* 行程页：从纸色起，首屏画好后淡出 */
+html.is-entering .pageveil {
+  opacity: 1;
+}
+
+html.is-entering.is-entered .pageveil {
+  opacity: 0;
 }
 
 /* ---------- 入场动画 ---------- */

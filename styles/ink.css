@@ -1,0 +1,190 @@
+/* ============================================================
+   首页墨绘层：SVG 的样式与关键帧
+
+   与 styles/landing.css 分开是因为它是一套独立的东西 ——
+   落点与几何由 scripts/hero-ink.js 按经纬度投影后写进属性，
+   这里只管「怎么显影」：透明度、半径、描边自绘、印章落下。
+
+   时间轴统一 15s，一拍一节：
+     0–7%   候选点零星绽开
+     20–24% 大多数退场、只留暗点
+     30%    选中的点落定
+     30–50% 墨线自绘
+     57%    朱砂印章盖下
+     92%    整幅收干净，进入下一轮
+   每个点按 --i 错峰，同周期只错相位，所以循环起来顺序恒定。
+   ============================================================ */
+
+/* 候选点：检索回来的那批地点。它们必须看得见 ——
+   这拍的意义就是「高德翻出了一堆地方」，太淡就白演了 */
+.ink--demo .ink__dot {
+  fill: var(--text-lo);
+  opacity: 0;
+  animation: ink-bloom 15s var(--ease) infinite;
+  animation-delay: calc(var(--i) * 0.07s);
+}
+
+.ink--demo .ink__dot.is-keep {
+  fill: var(--gold-ink);
+  animation-name: ink-bloom-keep;
+}
+
+@keyframes ink-bloom {
+  0%, 2% { opacity: 0; r: 0; }
+  7% { opacity: 0.7; r: 5; }
+  16% { opacity: 0.52; r: 3.6; }
+  24% { opacity: 0.3; r: 3.2; }
+  88% { opacity: 0.3; r: 3.2; }
+  94%, 100% { opacity: 0; r: 0; }
+}
+
+@keyframes ink-bloom-keep {
+  0%, 2% { opacity: 0; r: 0; }
+  7% { opacity: 0.8; r: 5; }
+  20% { opacity: 0.55; r: 4; }
+  30% { opacity: 1; r: 6; }
+  84% { opacity: 1; r: 6; }
+  92%, 100% { opacity: 0; r: 0; }
+}
+
+/* pathLength="1" 把长度归一化过，所以这条 dasharray 对任何长度的路径都成立 */
+.ink--demo .ink__line {
+  fill: none;
+  stroke: var(--gold-ink);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ink-draw 15s var(--ease) infinite;
+  animation-delay: calc(var(--i) * 0.12s);
+}
+
+@keyframes ink-draw {
+  0%, 28% { stroke-dashoffset: 1; opacity: 0; }
+  30% { opacity: 1; }
+  50% { stroke-dashoffset: 0; opacity: 1; }
+  84% { stroke-dashoffset: 0; opacity: 1; }
+  92%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+.ink--demo .ink__stamp {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ink-stamp 15s var(--ease) infinite;
+}
+
+.ink__stamp-box {
+  fill: var(--cinnabar);
+}
+
+.ink__stamp-text {
+  fill: var(--paper-0);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* 描边纹样两个模式共用，只有动画各自定义 ——
+   demo 跟着 15s 循环走，live 只在盖章那一瞬跑一次 */
+.ink__stamp-ring {
+  fill: none;
+  stroke: var(--cinnabar);
+  stroke-width: 1.6;
+  opacity: 0;
+}
+
+.ink--demo .ink__stamp-ring {
+  animation: ink-ring 15s var(--ease) infinite;
+}
+
+/* 盖下去的一瞬：先压低再回弹，像真的按了一枚章 */
+@keyframes ink-stamp {
+  0%, 54% { opacity: 0; transform: scale(1.5) rotate(-8deg); }
+  58% { opacity: 1; transform: scale(0.9) rotate(-2deg); }
+  62% { opacity: 1; transform: scale(1) rotate(0deg); }
+  86% { opacity: 1; transform: scale(1) rotate(0deg); }
+  92%, 100% { opacity: 0; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes ink-ring {
+  0%, 56% { r: 15; opacity: 0; }
+  58% { r: 15; opacity: 0.5; }
+  74% { r: 46; opacity: 0; }
+  100% { r: 46; opacity: 0; }
+}
+
+/* ============================================================
+   live：由真实的阶段事件驱动，不进循环
+
+   与 demo 的区别不只是「谁触发」，还有观感：
+   demo 是匀速循环的宣传片，live 要让人看出「这一批点真的搜出来了、
+   其中这些被留下了」—— 所以错峰撒开的节奏更短更密，
+   收敛与连线则用较慢的过渡，强调「筛选」和「成形」这两个动作。
+   ============================================================ */
+
+.ink--live .ink__dot {
+  fill: var(--text-lo);
+  opacity: 0;
+  r: 0;
+  transition: opacity 0.45s var(--ease), r 0.45s var(--ease), fill 0.5s var(--ease);
+}
+
+/* 检索结果撒开：每个点按序号错峰，快的先出现、慢的后出现 */
+.ink--live.is-discovered .ink__dot {
+  opacity: 0.55;
+  r: 4px;
+  transition-delay: calc(var(--i) * 0.012s);
+}
+
+/* 收敛要立刻发生，不能再带撒开时的错峰延迟 —— 否则「筛选」这个动作
+   会被拖成一条长长的尾巴，看不出是一个瞬间发生的决定 */
+.ink--live.is-discovered .ink__dot.is-dropped {
+  opacity: 0.13;
+  r: 2.6px;
+  transition: opacity 0.6s var(--ease), r 0.6s var(--ease);
+  transition-delay: 0s;
+}
+
+.ink--live.is-discovered .ink__dot.is-keep {
+  opacity: 1;
+  r: 6px;
+  fill: var(--gold-ink);
+  transition: opacity 0.6s var(--ease), r 0.6s var(--ease), fill 0.6s var(--ease);
+  transition-delay: 0s;
+}
+
+.ink--live .ink__line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition: stroke-dashoffset 1.1s var(--ease), opacity 0.3s var(--ease);
+}
+
+.ink--live .ink__line.is-drawn {
+  stroke-dashoffset: 0;
+  opacity: 0.92;
+}
+
+.ink--live .ink__stamp {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(1.5) rotate(-8deg);
+  transition: opacity 0.3s var(--ease), transform 0.34s var(--ease);
+}
+
+.ink--live.is-sealed .ink__stamp {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+.ink--live.is-sealed .ink__stamp-ring {
+  animation: ink-ring 1.4s var(--ease) 1 forwards;
+}
+

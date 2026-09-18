@@ -15,6 +15,8 @@ const fs = require('fs');
 const path = require('path');
 
 const { proxy } = require('./tools/amap-proxy');
+const { plan } = require('./tools/planner');
+const { wantsStream, streamPlan, sendJson } = require('./tools/sse');
 
 const ROOT = __dirname;
 const PORT = Number(process.argv[2]) || 5173;
@@ -38,6 +40,24 @@ function amapKey() {
  * 凡是能访问到这个端口的人 GET 一下就能拿到。
  */
 const BLOCKED = new Set(['config.local.js']);
+
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 100000) reject(new Error('请求体过大'));
+    });
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error('请求体不是有效 JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -77,6 +97,32 @@ http
         .catch((err) => {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: String(err && err.message) }));
+        });
+      return;
+    }
+
+    // 与线上 api/plan.js 同源同行为：要流就给流，不要就还是一次性 JSON
+    if (urlPath === '/api/plan') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: '只支持 POST' });
+        return;
+      }
+      readJson(req)
+        .then((body) =>
+          wantsStream(req)
+            ? streamPlan({ req, res, body, plan })
+            : plan(body).then((result) => sendJson(res, 200, result))
+        )
+        .catch((err) => {
+          console.error('[规划服务]', err && err.stack ? err.stack : err);
+          // 流已经开了头就不能再改状态码了，只能把连接收掉
+          if (res.headersSent) {
+            try { res.end(); } catch { /* 已经断了 */ }
+            return;
+          }
+          sendJson(res, err.message === '请求体过大' ? 413 : 502, {
+            error: err && err.message ? err.message : '规划服务失败'
+          });
         });
       return;
     }

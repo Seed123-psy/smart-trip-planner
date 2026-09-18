@@ -18,8 +18,10 @@
     return window.AMap;
   }
 
-  /** 每日主题色：统一由 config.js 提供，避免和 CSS 令牌各改一份对不上 */
-  const DAY_HUE = CFG.DAY_HUE;
+  /**
+   * 每日主题色不放这里查：颜色是按「第几天」取的，地图侧只有 dayId，
+   * 拿不到天数序号。由 app.js 把 hue 传进来，色源仍然只有 config.js 一处。
+   */
 
   // poiId -> 覆盖物数组。
   // 必须存数组而不是单个对象：同一天里同一个地点可能出现多次
@@ -85,13 +87,13 @@
   }
 
   /**
-   * 绘制一天的行程点标记。
-   * stops: [{ poi, index }]，index 为当天序号，用于地图上的编号
+   * 画一天的标记，不清场。
+   * 总览要把每一天的标记叠在同一张图上，所以「清场」必须由调用方决定，
+   * 不能塞在里面 —— drawMarkers 里那句 clearMarkers 会每天把前面
+   * 画好的全擦掉，最后只剩最后一天。
    */
-  function drawMarkers(stops, dayId) {
-    clearMarkers();
+  function addMarkers(stops, hue, dayIndex) {
     const AMap = amap();
-    const hue = DAY_HUE[dayId] || '#b07510';
 
     stops.forEach(({ poi, index }) => {
       const position = poi.coords; // [lng, lat] 数组，2.0 直接可用
@@ -131,6 +133,12 @@
     });
   }
 
+
+  /** 单日视图：先把上一张图清掉，再画这一天 */
+  function drawMarkers(stops, hue) {
+    clearMarkers();
+    addMarkers(stops, hue);
+  }
 
   function clearMarkers() {
     if (!map) return;
@@ -190,22 +198,24 @@
   /**
    * 把一组路径画成折线（不请求算路，纯渲染）。
    * 先建好新线再替换旧的：中途出错时旧路线仍在图上，不会出现空白闪烁。
+   *
+   * items 按「段」给色：单日视图里所有段同一个色，总览里每天一个色 ——
+   * 所以颜色是逐条带的，不能整批一个 hue。
+   * @param {Array<{points: Array<[number,number]>, hue: string, schematic: boolean}>} items
    */
-  function paintPaths(paths, dayId, schematic) {
+  function paintPaths(items) {
     const AMap = amap();
-    const hue = DAY_HUE[dayId] || '#b07510';
-    const style = lineStyle(schematic, hue);
     const next = [];
 
-    paths.forEach((path) => {
+    items.forEach((item) => {
       // 脏数据整条跳过，而不是把非法坐标交给高德
-      if (!Array.isArray(path)) return;
-      const clean = path.filter(isValidPoint);
+      if (!item || !Array.isArray(item.points)) return;
+      const clean = item.points.filter(isValidPoint);
       if (clean.length < 2) {
-        console.warn('[武汉攻略] 路径坐标非法，已跳过该段：', path.slice(0, 3));
+        console.warn('[武汉攻略] 路径坐标非法，已跳过该段：', item.points.slice(0, 3));
         return;
       }
-      next.push(new AMap.Polyline({ path: clean, ...style }));
+      next.push(new AMap.Polyline({ path: clean, ...lineStyle(item.schematic, item.hue) }));
     });
 
     clearRoute();
@@ -225,9 +235,11 @@
    * 绘制某天的完整路线。每段按自己的推荐方式取路径（见 route.js）。
    * 命中缓存则即时重绘，否则向高德请求并缓存。
    * @param {string[]} modes modes[i] 是 stops[i] -> stops[i+1] 的方式
+   * @param {string} hue 当天主题色。缓存只存路径本身，颜色每次现取现用，
+   *                     所以同一天的路换了序号也不会画出旧颜色
    * @returns {Promise<{ok:boolean, schematic:boolean, fromCache:boolean}>}
    */
-  async function drawRoute(stops, dayId, modes) {
+  async function drawRoute(stops, dayId, modes, hue) {
     const gen = ++paintGen;
 
     if (stops.length < 2) {
@@ -239,7 +251,7 @@
     const key = `${dayId}|${modes.join(',')}`;
     const cached = routeCache.get(key);
     if (cached) {
-      paintPaths(cached.paths, dayId, cached.schematic);
+      paintPaths(cached.paths.map((points) => ({ points, hue, schematic: cached.schematic })));
       return { ok: routeLines.length > 0, schematic: cached.schematic, fromCache: true };
     }
 
@@ -249,8 +261,52 @@
     // 结果仍进缓存（下次切回来即可命中），但过期了就不再上屏
     if (gen !== paintGen) return { ok: false, schematic, fromCache: false, stale: true };
 
-    paintPaths(paths, dayId, schematic);
+    paintPaths(paths.map((points) => ({ points, hue, schematic })));
     return { ok: routeLines.length > 0, schematic, fromCache: false };
+  }
+
+  /**
+   * 总览：把每一天的标记与路线一起画到同一张图上。
+   *
+   * 这是「先看全貌、再点进某一天」里的第一步 —— 用户从首页看到的
+   * 就是几天路线一起铺开的样子，进到行程页先接上那个画面，
+   * 而不是立刻塌成 Day 1。
+   *
+   * @param {Array<{id:string, hue:string, stops:Array, modes:string[]}>} days
+   */
+  async function drawOverview(days) {
+    const gen = ++paintGen;
+    clearMarkers();
+
+    days.forEach((day) => {
+      addMarkers(day.stops.map((s) => ({ poi: s.poi, index: s.mapIndex })), day.hue);
+    });
+
+    // 一起发出去：TripRoute 内部有并发闸门，会自己压住 QPS
+    const results = await Promise.all(
+      days.map((day) =>
+        day.stops.length < 2
+          ? Promise.resolve({ paths: [], schematic: false })
+          : window.TripRoute.getPaths(day.id, day.stops, day.modes)
+              // 某一天失败不该带走整张总览
+              .catch((error) => {
+                console.warn(`[武汉攻略] ${day.id} 路线获取失败，总览里该天缺线：`, error && error.message);
+                return { paths: [], schematic: false };
+              })
+      )
+    );
+
+    if (gen !== paintGen) return { ok: false, stale: true };
+
+    const items = [];
+    results.forEach((result, i) => {
+      (result.paths || []).forEach((points) => {
+        items.push({ points, hue: days[i].hue, schematic: result.schematic });
+      });
+    });
+
+    paintPaths(items);
+    return { ok: routeLines.length > 0, lines: routeLines.length };
   }
 
   function clearRoute() {
@@ -258,6 +314,12 @@
       map.remove(routeLines);
     }
     routeLines = [];
+  }
+
+  function clearCache() {
+    routeCache.clear();
+    paintGen++;
+    clearRoute();
   }
 
   /**
@@ -306,8 +368,10 @@
     resetDay,
     drawMarkers,
     drawRoute,
+    drawOverview,
     focusStops,
     clearRoute,
+    clearCache,
     hasPath,
     getMap: () => map,
     /** 当前路线折线数量，供调试与自动化检查 */

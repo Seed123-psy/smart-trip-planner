@@ -21,3 +21,7 @@ desktop.ini
 # Claude Code 本地配置与日志。若日后要共享权限/技能配置，
 # 请单独放行 .claude/settings.json，别整个目录放行
 .claude/
+
+# 环境变量文件：即使当前没用 dotenv，也先挡住，免得日后放进来
+.env
+.env.*

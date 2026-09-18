@@ -54,8 +54,13 @@
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'
   };
 
-  /** 一个带图标标题的分区 */
+  /**
+   * 一个带图标标题的分区。
+   * 内容为空时返回 null，由调用方滤掉 —— AI 规划出来的城市没有门票与雨天数据，
+   * 留着空标题只会让人以为页面坏了。
+   */
   function section(title, iconPath, content) {
+    if (!content || !content.childNodes.length) return null;
     const box = el('section', 'prep-sec');
     const head = el('div', 'prep-sec__head');
     head.append(icon(iconPath, 15), el('h3', 'prep-sec__title', title));
@@ -137,10 +142,15 @@
 
   function renderTransport() {
     const frag = document.createDocumentFragment();
-    frag.append(el('p', 'prep-lead', PREP.transport.summary));
-    const ul = el('ul', 'prep-list');
-    PREP.transport.points.forEach((p) => ul.append(el('li', null, p)));
-    frag.append(ul);
+    // 行前准备可能整个没跑成，这块就什么都没有
+    const data = PREP.transport || {};
+    if (data.summary) frag.append(el('p', 'prep-lead', data.summary));
+    const points = Array.isArray(data.points) ? data.points : [];
+    if (points.length) {
+      const ul = el('ul', 'prep-list');
+      points.forEach((p) => ul.append(el('li', null, p)));
+      frag.append(ul);
+    }
     return frag;
   }
 
@@ -159,9 +169,14 @@
 
   function renderTickets() {
     const frag = document.createDocumentFragment();
-    orderedPois()
-      .filter((p) => p.ticket)
-      .forEach((p) => frag.append(pairRow(p.name, p.ticket)));
+    // 两个来源：内置行程逐点写在 poi.js 的 ticket 字段里；
+    // AI 规划来的由行前准备 Agent 给（高德不提供票价，模型凭经验估）。
+    // Agent 那份优先 —— 它是对着这次行程现算的。
+    const byPoi = new Map((PREP.tickets || []).map((t) => [t.poiId, t.text]));
+    orderedPois().forEach((p) => {
+      const text = byPoi.get(p.id) || p.ticket;
+      if (text) frag.append(pairRow(p.name, text));
+    });
     return frag;
   }
 
@@ -265,58 +280,40 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 抽屉开关                                                            */
+  /* 注册到抽屉壳                                                        */
   /* ------------------------------------------------------------------ */
 
-  let root = null;
-  let closeBtn = null;
-  let lastFocus = null;
-
-  function open() {
-    if (!root) return;
-    lastFocus = document.activeElement;
-    root.classList.add('is-on');
-    if (closeBtn) closeBtn.focus();
-  }
-
-  function close() {
-    if (!root) return;
-    root.classList.remove('is-on');
-    // 焦点还给打开它的按钮，键盘用户不会掉回页面顶部
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
-  }
-
-  function init() {
-    root = document.getElementById('prep');
-    const body = document.getElementById('prep-body');
-    const openBtn = document.getElementById('prep-open');
-    closeBtn = document.getElementById('prep-close');
-
-    if (!root || !body || !openBtn) return;
-
-    body.append(
+  /**
+   * 建出这一屏的全部内容。
+   *
+   * 每次打开都重跑一遍是因为行程会换：AI 重新规划之后，待预约、打包、
+   * 交通结论全部换成新城市的，不能还挂着上一趟的清单。
+   * 空的小节在这里滤掉（section 返回 null）。
+   */
+  function renderPrep() {
+    const frag = document.createDocumentFragment();
+    [
       section('待预约', ICON.alert, renderBookings()),
-      section('打车还是地铁', ICON.route, renderTransport()),
       section('门票一览', ICON.ticket, renderTickets()),
+      section('打车还是地铁', ICON.route, renderTransport()),
       section('雨天备选', ICON.umbrella, renderRain()),
       section('必带物品', ICON.check, renderPacking()),
       section('实用信息', ICON.info, renderEmergency())
-    );
+    ]
+      .filter(Boolean)
+      .forEach((node) => frag.append(node));
 
-    openBtn.addEventListener('click', open);
-    if (closeBtn) closeBtn.addEventListener('click', close);
-
-    // 点遮罩关闭；点面板内部不关
-    root.addEventListener('click', (e) => {
-      if (e.target === root) close();
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && root.classList.contains('is-on')) close();
-    });
-
-    updatePackCount();
+    // 打包计数要等节点进 DOM 之后才有得数，挂在下一帧
+    requestAnimationFrame(updatePackCount);
+    return frag;
   }
 
-  window.TripPrep = { init, open, close, PACK_KEY };
+  window.TripDrawer.register('prep', {
+    eyebrow: '出发前过一遍',
+    title: '行前准备',
+    render: renderPrep
+  });
+
+  // refresh 由 app.js 在行程换了之后调；壳由 drawer.js 统一管
+  window.TripPrep = { refresh: () => window.TripDrawer.refresh('prep'), PACK_KEY };
 })();

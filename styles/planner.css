@@ -1,0 +1,214 @@
+/* AI 行程规划面板 */
+
+.planner-open {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px 5px 11px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--paper-0);
+  border: 1px solid var(--gold-ink);
+  background: var(--gold-ink);
+  white-space: nowrap;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.planner-open:hover {
+  color: var(--paper-0);
+  border-color: var(--text-hi);
+  background: var(--text-hi);
+}
+
+.planner {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(31, 27, 21, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.planner[hidden] {
+  display: none;
+}
+
+.planner__panel {
+  width: min(640px, 100%);
+  max-height: min(760px, calc(100dvh - 40px));
+  overflow-y: auto;
+  background: var(--paper-0);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: 0 22px 60px -24px rgba(38, 33, 26, 0.55);
+  animation: planner-in 0.24s var(--ease) both;
+}
+
+@keyframes planner-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.planner__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.planner__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--gold-ink);
+}
+
+.planner__title {
+  margin: 5px 0 0;
+  font-family: var(--font-display);
+  font-size: 23px;
+}
+
+.planner__close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  color: var(--text-lo);
+  border: 1px solid var(--rule);
+  background: var(--paper-1);
+}
+
+.planner__close:hover {
+  color: var(--text-hi);
+  border-color: var(--rule-strong);
+}
+
+.planner__form {
+  display: grid;
+  gap: 16px;
+  padding: 22px 24px 24px;
+}
+
+.planner__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+/* 城市名比日期长，让它独占一行；剩下的两两成对：
+   开始/结束日期要挨着才好对比，节奏/预算同理。去掉天数输入框后
+   正好 5 项，不这样排会剩一个半空的格子。 */
+.planner__grid label:first-child {
+  grid-column: 1 / -1;
+}
+
+/* 天数提示：日期一变就重画，色块数量 = 行程天数 */
+.planner label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+/* 选项胶囊组见 styles/form.css：首页表单也要用，只放一份 */
+
+.planner input,
+.planner textarea,
+.planner select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  color: var(--text-hi);
+  background: var(--paper-1);
+  font: inherit;
+  outline: none;
+}
+
+.planner textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.planner input:focus,
+.planner textarea:focus,
+.planner select:focus {
+  border-color: var(--gold-ink);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.planner__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.planner__status {
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--text-lo);
+}
+
+.planner__status.is-error {
+  color: var(--cinnabar);
+}
+
+.planner__submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 6px;
+  color: var(--paper-0);
+  background: var(--text-hi);
+  font-size: 13px;
+}
+
+.planner__submit:hover {
+  background: var(--gold-ink);
+}
+
+.planner__submit .spinner {
+  display: none;
+}
+
+.planner__submit.is-loading {
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.planner__submit.is-loading .spinner {
+  display: block;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: var(--paper-0);
+}
+
+.planner__result {
+  margin: 0 24px 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--gold-line);
+  border-radius: 6px;
+  background: var(--gold-soft);
+  color: var(--text-mid);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.planner__result strong {
+  color: var(--text-hi);
+}
+
+@media (max-width: 640px) {
+  .planner { padding: 10px; }
+  .planner__grid { grid-template-columns: 1fr; }
+  .planner__panel { max-height: calc(100dvh - 20px); }
+  .planner__head, .planner__form { padding-left: 18px; padding-right: 18px; }
+  .planner__result { margin-left: 18px; margin-right: 18px; }
+}

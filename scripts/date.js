@@ -52,5 +52,16 @@
     return d ? `${d.getMonth() + 1} 月 ${d.getDate()} 日` : '';
   }
 
-  window.TripDate = { parse, format, addDays, today, daysBetween, label };
+  /**
+   * 含首尾的行程天数：10-03 → 10-09 是 7 天。
+   * 表单只让用户选起止日期，天数一律由这里派生 —— 服务端也是同一个口径
+   * （tools/planner.js 的 dateDiff + 1），两边不能各算一套。
+   * 任一边非法、或终点早于起点时返回 null，由调用方决定怎么提示。
+   */
+  function tripDays(start, end) {
+    const diff = daysBetween(start, end);
+    return diff == null || diff < 0 ? null : diff + 1;
+  }
+
+  window.TripDate = { parse, format, addDays, today, daysBetween, label, tripDays };
 })();

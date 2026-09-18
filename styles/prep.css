@@ -1,11 +1,17 @@
 /* ============================================================
-   行前准备：顶栏入口按钮 + 右侧抽屉
+   抽屉：顶栏入口按钮 + 右侧面板
+
+   一份壳，多个视图（行前准备 / 当地美食）。视图在各自文件里注册，
+   见 scripts/drawer.js。所以这里的选择器按「抽屉」写，不绑定某一个视图。
+
    单独成文件是因为 components.css 已接近 400 行，按项目的文件体量约定该拆
    ============================================================ */
 
-/* ---------------- 顶栏入口 ---------------- */
+/* ---------------- 顶栏入口 ----------------
+   两个入口同一款式：它们是并列的两个 Agent，不该有主次之分 */
 
-.prep-open {
+.prep-open,
+.food-open {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -20,14 +26,21 @@
     background 0.18s var(--ease);
 }
 
-.prep-open:hover {
+.prep-open:hover,
+.food-open:hover {
   color: var(--gold-ink);
   border-color: var(--gold-line);
   background: var(--gold-soft);
 }
 
-.prep-open svg {
+.prep-open svg,
+.food-open svg {
   opacity: 0.85;
+}
+
+/* 没有内容的入口整颗藏起来（比如内置示例行程没有美食数据） */
+.food-open[hidden] {
+  display: none;
 }
 
 /* ---------------- 遮罩 ---------------- */

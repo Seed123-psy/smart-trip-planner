@@ -50,13 +50,29 @@
   }
 
   /**
-   * 并发闸门。高德个人 key 的 QPS 很低（约 3），一次性放太多请求出去会被限流，
-   * 表现为部分段拿不到路径而退化成直线。这里把在途请求压在 3 个以内：
-   * 既不超限，又比纯串行快得多（一天 8 个逐段请求从 ~4.5s 降到 ~1.5s）。
+   * 并发 + 速率双闸门。
+   *
+   * 高德个人 key 的 CUQPS 是**并发**限制（CU 就是 concurrent），实测并发 2
+   * 就会撞上，所以这里一律串行，只用最小间隔控速。
+   *
+   * 这里原来是「并发 3、不控速」：一天的路只发 3 个在途，看着够保守，
+   * 但总览一次要取四五天，闸门一放开就是十几个请求砸出去，必然有段被限流。
+   * 串行确实慢一些，但拿到的是真路线，而不是一条直的。
    */
-  const MAX_CONCURRENT = 3;
+  const MAX_CONCURRENT = 1;
+  /** 相邻两次请求的最小间隔（毫秒），约合 2.5 QPS */
+  const MIN_INTERVAL_MS = 320;
+  /**
+   * 限流 / 超时都是瞬时故障，退避重试通常就过了。
+   * 只重试两次：真挂了重试多少次都一样，不能把加载态无限拖下去。
+   */
+  const RETRY_DELAYS_MS = [500, 1400];
+
   let inFlight = 0;
   const queue = [];
+  let lastStart = 0;
+  /** 节流串成一条链：同时进来的几个若各自算等待时间，会算出同样的值一起发出去 */
+  let pace = Promise.resolve();
 
   function acquire() {
     if (inFlight < MAX_CONCURRENT) {
@@ -72,6 +88,38 @@
     else inFlight--;
   }
 
+  function waitTurn() {
+    pace = pace.then(async () => {
+      const wait = lastStart + MIN_INTERVAL_MS - Date.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      lastStart = Date.now();
+    });
+    return pace;
+  }
+
+  /** 值不值得再试一次：限流、超时、网络抖动值得，参数错不值得 */
+  function worthRetry(message) {
+    return /CUQPS|LIMIT|QUOTA|超时|Failed to fetch|NetworkError|代理返回 5/i.test(String(message));
+  }
+
+  async function requestOnce(url) {
+    await acquire();
+    try {
+      await waitTurn();
+      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`代理返回 ${res.status}`);
+      const body = await res.json();
+
+      // 高德出错时返回的是 HTTP 200 + {"status":"0","info":"CUQPS_..."}。
+      // 不认这个字段的话，限流会被当成「这条路线不存在」，于是画出一条直线 ——
+      // 用户看到的是一条约等于假路线的东西，而不是一次失败。
+      if (body && body.status === '0') throw new Error(body.info || '高德返回错误');
+      return body;
+    } finally {
+      release();
+    }
+  }
+
   async function request(endpoint, params) {
     // file:// 下没有同源后端，早失败并说清原因，别让用户对着一堆失败请求猜
     if (location.protocol === 'file:') {
@@ -82,13 +130,13 @@
     url.searchParams.set('p', endpoint);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
-    await acquire();
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!res.ok) throw new Error(`代理返回 ${res.status}`);
-      return await res.json();
-    } finally {
-      release();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await requestOnce(url);
+      } catch (error) {
+        if (attempt >= RETRY_DELAYS_MS.length || !worthRetry(error && error.message)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+      }
     }
   }
 
@@ -148,12 +196,44 @@
             if (!p || !p.steps) return [from, to];
             return p.steps.flatMap((s) => parsePolyline(s.polyline));
           })
-          // 单段失败只降级这一段，不能把整天的路线都丢掉
-          .catch(() => [from, to])
+          // 单段失败只降级这一段，不能把整天的路线都丢掉。
+          // 但原因必须记下来 —— 之前这里是无声的 catch，
+          // 限流被降级成直线之后没有任何痕迹，问题一直查不到。
+          .catch((err) => {
+            console.warn('[武汉攻略] 步行段取路失败，该段退化为直线：', err && err.message);
+            return [from, to];
+          })
       );
     }
 
     return Promise.all(jobs);
+  }
+
+  /**
+   * 公交方案的折线：接驳步行段 + 公交段 + 铁路段串成一条。
+   * 单独抽出来是因为编辑模式也要用 —— getLeg 取单段时要拼同样的东西。
+   */
+  function transitPolyline(transit) {
+    const points = [];
+    transit.segments.forEach((seg) => {
+      // 步行接驳段
+      const walkSteps = seg.walking && seg.walking.steps;
+      if (walkSteps) {
+        walkSteps.forEach((s) => points.push(...parsePolyline(s.polyline || s.path)));
+      }
+      // 公交 / 地铁 / 轮渡段
+      const lines = seg.bus && seg.bus.buslines;
+      if (lines) {
+        lines.forEach((line) => points.push(...parsePolyline(line.polyline)));
+      }
+      // 铁路段（如城际）：只有首末站坐标，没有线路折线
+      const railway = seg.railway;
+      if (railway && railway.departure_stop && railway.arrival_stop) {
+        points.push(...parsePolyline(railway.departure_stop.location));
+        points.push(...parsePolyline(railway.arrival_stop.location));
+      }
+    });
+    return points;
   }
 
   /** 逐段取公交路径。轮渡段也走这里（高德把它当作一条 busline 返回） */
@@ -177,31 +257,15 @@
             const transit = json.route && json.route.transits && json.route.transits[0];
             if (!transit || !transit.segments) return [from, to];
 
-            const points = [];
-            transit.segments.forEach((seg) => {
-              // 步行接驳段
-              const walkSteps = seg.walking && seg.walking.steps;
-              if (walkSteps) {
-                walkSteps.forEach((s) => points.push(...parsePolyline(s.polyline || s.path)));
-              }
-              // 公交 / 地铁 / 轮渡段
-              const lines = seg.bus && seg.bus.buslines;
-              if (lines) {
-                lines.forEach((line) => points.push(...parsePolyline(line.polyline)));
-              }
-              // 铁路段（如城际）：只有首末站坐标，没有线路折线
-              const railway = seg.railway;
-              if (railway && railway.departure_stop && railway.arrival_stop) {
-                points.push(...parsePolyline(railway.departure_stop.location));
-                points.push(...parsePolyline(railway.arrival_stop.location));
-              }
-            });
-
             // 注意：points 的元素已经是 [lng, lat] 坐标对，绝不能再 flat()，
             // 否则会被拆成裸数字，整条路线在 map.js 的合法性校验里被丢弃。
+            const points = transitPolyline(transit);
             return points.length >= 2 ? points : [from, to];
           })
-          .catch(() => [from, to])
+          .catch((err) => {
+            console.warn('[武汉攻略] 公交段取路失败，该段退化为直线：', err && err.message);
+            return [from, to];
+          })
       );
     }
 
@@ -287,5 +351,79 @@
     cache.clear();
   }
 
-  window.TripRoute = { getPaths, clearCache, parsePolyline };
+  /**
+   * 取单段路：距离、耗时、折线一次拿全。
+   *
+   * 编辑模式新增的路段要用它 —— 原本的距离耗时是构建期或规划时算好落在
+   * ROUTES.legs 里的，用户新连出来的那一对没有那份数据，得现取。
+   * getPaths 只回折线（它服务的是「画线」，距离耗时有别的来源），所以另开一个。
+   *
+   * @returns {Promise<{distance:number, duration:number, paths:Array}>}
+   *          distance 米、duration 秒；取不到时抛错，由调用方决定怎么降级
+   */
+  async function getLeg(from, to, mode) {
+    const origin = from.join(',');
+    const destination = to.join(',');
+    const wanted = ['driving', 'transit', 'walking'].includes(mode) ? mode : 'driving';
+
+    if (wanted === 'walking') {
+      const json = await request('/v3/direction/walking', { origin, destination });
+      const p = json.route && json.route.paths && json.route.paths[0];
+      if (!p || !p.steps) throw new Error('无步行路径');
+      return {
+        distance: Number(p.distance),
+        duration: Number(p.duration),
+        paths: [p.steps.flatMap((s) => parsePolyline(s.polyline))]
+      };
+    }
+
+    if (wanted === 'transit') {
+      const city = CFG.TRIP.cityCode || '027';
+      const json = await request('/v3/direction/transit/integrated', {
+        origin,
+        destination,
+        city,
+        cityd: city,
+        strategy: 0
+      });
+      const t = json.route && json.route.transits && json.route.transits[0];
+      if (!t) throw new Error('无公交方案');
+      const points = transitPolyline(t);
+      return {
+        distance: Number(t.distance),
+        duration: Number(t.duration),
+        paths: [points.length >= 2 ? points : [from, to]]
+      };
+    }
+
+    const json = await request('/v3/direction/driving', {
+      origin,
+      destination,
+      strategy: 10,
+      extensions: 'base'
+    });
+    const p = json.route && json.route.paths && json.route.paths[0];
+    if (!p || !p.steps) throw new Error('无驾车路径');
+    return {
+      distance: Number(p.distance),
+      duration: Number(p.duration),
+      paths: [p.steps.flatMap((s) => parsePolyline(s.polyline))]
+    };
+  }
+
+  /**
+   * 把已经取好的折线塞进缓存。
+   *
+   * 编辑模式要按「每一对相邻点」单独取路（路段卡片需要逐段的距离耗时），
+   * 而地图画线走的是 getPaths 那套按出行方式分组的缓存。
+   * 不接上的话，同一段路会被取两遍 —— 用户每改一次就得多等一倍。
+   *
+   * @param {string[]} modes 必须与地图侧 legModes() 算出来的完全一致，
+   *        否则键对不上，白塞
+   */
+  function seed(dayId, modes, paths, schematic) {
+    cache.set(`${dayId}|${modes.join(',')}`, { paths, schematic });
+  }
+
+  window.TripRoute = { getPaths, getLeg, seed, clearCache, parsePolyline };
 })();

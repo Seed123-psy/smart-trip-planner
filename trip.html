@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>行程详情 · 武汉</title>
+  <meta name="description" content="按天展开的行程时间轴：路线、时间与距离一览" />
+  <!-- 私人攻略，不希望被搜索引擎收录：链接只发给同行的人 -->
+  <meta name="robots" content="noindex, nofollow" />
+
+  <meta name="theme-color" content="#faf8f4" />
+
+  <!-- 内联 favicon（定位针，描边色取古铜），避免多一次 404 请求 -->
+  <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b8801f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/><circle cx='12' cy='10' r='3'/></svg>"
+  />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <link rel="stylesheet" href="styles/prep.css" />
+  <link rel="stylesheet" href="styles/map.css" />
+  <link rel="stylesheet" href="styles/form.css" />
+  <link rel="stylesheet" href="styles/editor.css" />
+  <link rel="stylesheet" href="styles/planner.css" />
+
+  <!-- 从首页过来才铺纸面（见 base.css 的 .pageveil）。
+       必须放在 head 里同步执行：等到 body 末尾的脚本跑，首屏可能已经画出来了，
+       纸面再铺上去反而闪一下。 -->
+  <script>
+    (function () {
+      try {
+        var at = Number(sessionStorage.getItem('trip-enter-at')) || 0;
+        sessionStorage.removeItem('trip-enter-at');
+        if (at && Date.now() - at < 5000) {
+          document.documentElement.className += ' is-entering';
+        }
+      } catch (e) { /* 存不了 storage 就没有过渡，不影响别的 */ }
+    })();
+  </script>
+</head>
+
+<body>
+  <div class="pageveil" aria-hidden="true"></div>
+  <div class="app">
+
+    <!-- ================= 顶部关键信息带 ================= -->
+    <header class="band rise">
+      <div class="band__brand">
+        <a class="band__back" href="index.html" title="回首页重新规划">
+          <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          <span>首页</span>
+        </a>
+        <h1 class="band__city" id="city">武汉</h1>
+        <div class="band__meta">
+          <span class="band__dates num" id="date-range"></span>
+          <div class="band__tags" id="tags"></div>
+        </div>
+        <!-- 当前实况，由 scripts/weather.js 取数、app.js 渲染；取不到时保持隐藏 -->
+        <div class="wx wx--live" id="wx-live" hidden></div>
+
+        <button class="edit-open" id="edit-open" type="button" aria-pressed="false">
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <span>编辑行程</span>
+        </button>
+
+        <button
+          class="planner-open"
+          id="planner-open"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="planner"
+        >
+          <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" />
+            <path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z" />
+          </svg>
+          <span>AI 规划</span>
+        </button>
+
+        <button
+          class="prep-open"
+          id="prep-open"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="drawer"
+        >
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M11 6h10M11 12h10M11 18h10" />
+            <path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17" />
+          </svg>
+          <span>行前准备</span>
+        </button>
+
+        <!-- 当地美食是另一个 Agent 的产出，所以是另一个入口。
+             没有美食数据时（比如内置示例行程）由脚本把 hidden 保持住 -->
+        <button
+          class="food-open"
+          id="food-open"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="drawer"
+          hidden
+        >
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4 10h16a1 1 0 0 0 1-1 6 6 0 0 0-6-6H9a6 6 0 0 0-6 6 1 1 0 0 0 1 1Z" />
+            <path d="M5 10v3a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-3" />
+            <path d="m9 21 1.5-4M15 21l-1.5-4" />
+          </svg>
+          <span>当地美食</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ================= 日切换 ================= -->
+    <nav class="daybar" id="daybar" aria-label="按天切换行程"></nav>
+
+    <!-- ================= 主体：时间轴 + 地图 ================= -->
+    <main class="body">
+
+      <section class="sidebar" id="sidebar">
+        <div class="sidebar__head">
+          <span class="sidebar__eyebrow" id="day-eyebrow"></span>
+          <h2 class="sidebar__title" id="day-title"></h2>
+          <p class="sidebar__summary" id="day-summary"></p>
+          <!-- 当日天气；行程日超出高德 4 天预报窗口时改为显示「何时可查」 -->
+          <div class="wx wx--day" id="wx-day" hidden></div>
+          <div class="daystats" id="day-stats"></div>
+        </div>
+        <div class="sidebar__scroll" id="sidebar-scroll"></div>
+      </section>
+
+      <section class="map-panel">
+        <div id="map"></div>
+
+        <!-- 折叠侧的开关。骑在侧栏与地图的分界线上，收起后贴地图左缘 -->
+        <button
+          class="rail-toggle"
+          id="rail-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="sidebar"
+          aria-label="收起侧栏"
+        >
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="15"
+            height="15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+
+        <div class="map-status" id="map-status">
+          <span class="spinner"></span>
+          <span>正在规划路线…</span>
+        </div>
+
+        <!-- 高德未返回真实路径时，明示图上画的是示意直线，避免误导 -->
+        <div class="map-note" id="map-note">
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="13"
+            height="13"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z" />
+            <path d="M12 9v4M12 17h.01" />
+          </svg>
+          <span>未取到真实道路路径，图中路线为示意直线</span>
+        </div>
+
+        <div class="map-error" id="map-error">
+          <h3>地图暂时没能加载出来</h3>
+          <p></p>
+          <p>
+            行程时间轴不受影响，仍可正常查看。修复后刷新页面即可。
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================= AI 行程规划 ================= -->
+  <div class="planner" id="planner" role="dialog" aria-modal="true" aria-labelledby="planner-title" hidden>
+    <div class="planner__panel">
+      <header class="planner__head">
+        <div>
+          <span class="planner__eyebrow">DeepSeek 路线助手</span>
+          <h2 class="planner__title" id="planner-title">生成一份新行程</h2>
+        </div>
+        <button class="planner__close" id="planner-close" type="button" aria-label="关闭 AI 规划">
+          <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      </header>
+      <form class="planner__form" id="planner-form">
+        <div class="planner__grid">
+          <label>城市<input id="planner-city" name="city" required /></label>
+          <label>开始日期<input id="planner-start" name="startDate" type="date" required /></label>
+          <label>结束日期<input id="planner-end" name="endDate" type="date" required /></label>
+          <label>节奏<select id="planner-pace" name="pace"><option value="slow">慢游</option><option value="balanced" selected>均衡</option><option value="fast">紧凑</option></select></label>
+          <label>预算<select id="planner-budget" name="budget"><option value="low">经济</option><option value="medium" selected>适中</option><option value="high">宽松</option></select></label>
+        </div>
+        <!-- 天数不再手填：由起止日期算出，顺带把每天的颜色摊开 -->
+        <p class="dayhint" id="planner-days-hint"></p>
+
+        <!-- 选项组用真实的 radio/checkbox：键盘、读屏、表单语义都是白送的，
+             只是把外观做成胶囊。不用 fieldset/legend，它在 flex 布局里表现不稳。 -->
+        <div class="chips" role="group" aria-label="旅行偏好">
+          <span class="chips__title">旅行偏好</span>
+          <label><input type="radio" name="party" value="solo" /><span>独自出行</span></label>
+          <label><input type="radio" name="party" value="family" /><span>家庭出行</span></label>
+          <label><input type="radio" name="party" value="couple" /><span>情侣出行</span></label>
+          <label><input type="radio" name="party" value="friends" /><span>朋友出行</span></label>
+          <label><input type="radio" name="party" value="seniors" /><span>老人出行</span></label>
+        </div>
+
+        <div class="chips" role="group" aria-label="风格偏好">
+          <span class="chips__title">风格偏好 <em>可多选</em></span>
+          <label><input type="checkbox" name="styles" value="culture" /><span>文化体验</span></label>
+          <label><input type="checkbox" name="styles" value="classic" /><span>经典必去</span></label>
+          <label><input type="checkbox" name="styles" value="nature" /><span>自然风光</span></label>
+          <label><input type="checkbox" name="styles" value="cityscape" /><span>城市景观</span></label>
+          <label><input type="checkbox" name="styles" value="history" /><span>历史古迹</span></label>
+        </div>
+
+        <div class="chips" role="group" aria-label="时间安排">
+          <span class="chips__title">时间安排 <em>可多选</em></span>
+          <label><input type="checkbox" name="timing" value="early" /><span>偏早出</span></label>
+          <label><input type="checkbox" name="timing" value="late" /><span>偏晚归</span></label>
+        </div>
+
+        <label>兴趣与要求<textarea id="planner-interests" name="interests" rows="3" placeholder="具体想去的，例如：胡同、长城、烤鸭、国家博物馆"></textarea></label>
+        <label>更多偏好<textarea id="planner-notes" name="notes" rows="3" placeholder="还有什么要照顾的？例如：带 3 岁小孩、不吃辣、腿脚不便不想爬坡、中午必须回酒店休息"></textarea></label>
+        <div class="planner__actions">
+          <span class="planner__status" id="planner-status" role="status"></span>
+          <button class="planner__submit" type="submit"><span class="spinner"></span><span>生成行程</span></button>
+        </div>
+      </form>
+      <div class="planner__result" id="planner-result" hidden></div>
+    </div>
+  </div>
+
+  <!-- ================= 抽屉 =================
+       壳只有一份，行前准备与当地美食各注册一个视图进来（见 scripts/drawer.js）。
+       标题与眉标由打开它的那个视图填。 -->
+  <div class="prep" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="prep__panel">
+      <header class="prep__head">
+        <div>
+          <span class="prep__eyebrow" id="drawer-eyebrow"></span>
+          <h2 class="prep__title" id="drawer-title"></h2>
+        </div>
+        <button class="prep__close" id="drawer-close" type="button" aria-label="关闭">
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </header>
+      <div class="prep__body" id="drawer-body"></div>
+    </div>
+  </div>
+
+  <!-- 数据层：改行程只需动 data/ 下的文件 -->
+  <script src="config.js"></script>
+  <script src="data/poi.js"></script>
+  <script src="data/itinerary.js"></script>
+  <script src="data/prep.js"></script>
+  <script src="data/routes-legs.js"></script>
+
+  <!-- 高德 JSAPI Loader（官方 CDN） -->
+  <script src="https://webapi.amap.com/loader.js"></script>
+
+  <!-- 应用层：date 与 weather 在前，prep 依赖 timeline 的图标构造器，app 最后编排 -->
+  <script src="scripts/date.js"></script>
+  <script src="scripts/weather.js"></script>
+  <script src="scripts/route.js"></script>
+  <script src="scripts/map.js"></script>
+  <script src="scripts/timeline.js"></script>
+  <!-- 抽屉壳要在各个视图之前：视图是注册进来的 -->
+  <script src="scripts/drawer.js"></script>
+  <script src="scripts/prep.js"></script>
+  <script src="scripts/food.js"></script>
+  <!-- 编辑器要注册候选景点面板，且 app.js 启动时会调它的 init -->
+  <script src="scripts/editor.js"></script>
+  <script src="scripts/plan-form.js"></script>
+  <!-- plan-store 必须在 app.js 之前：boot() 一上来就要读首页交接过来的行程 -->
+  <script src="scripts/plan-store.js"></script>
+  <script src="scripts/plan-client.js"></script>
+  <script src="scripts/app.js"></script>
+  <script src="scripts/planner.js"></script>
+</body>
+</html>

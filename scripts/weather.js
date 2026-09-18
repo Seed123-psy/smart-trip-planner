@@ -130,6 +130,13 @@
 
   async function load() {
     state.status = 'loading';
+    // 重新取数（比如规划到另一座城市）时先清掉上一份：
+    // 新数据回来前留着旧城市的天气，比什么都不显示更容易误导
+    state.live = null;
+    state.forecast = {};
+    state.reportTime = null;
+    state.error = null;
+
     const adcode = CFG.TRIP.adcode;
 
     // 两个接口职责不同：base 只有实况，all 只有预报，all 里不含实况字段
