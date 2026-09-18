@@ -1,0 +1,629 @@
+/* ============================================================
+   页面骨架：顶部信息带 + 日切换标签 + 双栏主体
+   ============================================================ */
+
+.app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ---------------- 关键信息带 ---------------- */
+
+.band {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 26px;
+  min-height: 96px;
+  background: var(--paper-0);
+  border-bottom: 1px solid var(--rule);
+  box-shadow: 0 1px 3px rgba(38, 33, 26, 0.04);
+}
+
+/* 左：城市 + 日期，衬线大字，视觉锚点 */
+.band__brand {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-right: 28px;
+  border-right: 1px solid var(--rule);
+}
+
+.band__city {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin: 0;
+  line-height: 1;
+  /* 墨色起、古铜收，和白纸形成「题字」的观感 */
+  background: linear-gradient(158deg, var(--text-hi) 34%, var(--gold-bright) 128%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.band__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.band__dates {
+  font-family: var(--font-num);
+  font-size: 21px;
+  font-weight: 500;
+  color: var(--text-mid);
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+.band__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 0 8px;
+  border-radius: 99px;
+  /* 底色比页面底色深一档，文字要比其它小字再深一级才够 AA */
+  color: var(--text-mid);
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-2);
+  white-space: nowrap;
+}
+
+/* 中：三个锚点卡片（抵达 / 住宿 / 返程） */
+.band__anchors {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.anchor {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule);
+  background: var(--paper-1);
+  min-width: 0;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.anchor:hover {
+  border-color: var(--gold-line);
+  background: var(--paper-0);
+}
+
+.anchor__icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--gold-soft);
+  color: var(--gold-ink);
+}
+
+.anchor__body {
+  min-width: 0;
+}
+
+.anchor__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.anchor__label {
+  font-size: 11px;
+  color: var(--text-lo);
+  letter-spacing: 0.1em;
+}
+
+.anchor__time {
+  font-family: var(--font-num);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gold-ink);
+  line-height: 1;
+}
+
+.anchor__place {
+  font-size: 13px;
+  color: var(--text-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.anchor__note {
+  font-size: 11px;
+  color: var(--text-lo);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------- 日切换标签 ---------------- */
+
+.daybar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 18px;
+  background: var(--paper-0);
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.daybar::-webkit-scrollbar {
+  display: none;
+}
+
+.daytab {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 11px 20px 12px;
+  text-align: left;
+  color: var(--text-lo);
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.daytab::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--day-hue, var(--gold));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.32s var(--ease);
+}
+
+.daytab:hover {
+  color: var(--text-mid);
+  background: var(--paper-2);
+}
+
+.daytab.is-active {
+  color: var(--text-hi);
+}
+
+.daytab.is-active::after {
+  transform: scaleX(1);
+}
+
+.daytab__label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-num);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+}
+
+.daytab__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--day-hue, var(--gold));
+  /* 浅色底上不需要发光，改用一圈同色淡环撑出存在感 */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--day-hue, var(--gold)) 16%, transparent);
+}
+
+.daytab__date {
+  font-size: 11px;
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+/* ---------------- 双栏主体 ---------------- */
+
+.body {
+  position: relative; /* 折叠后侧栏要绝对定位浮在地图上 */
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(390px, 34%) 1fr;
+  min-height: 0;
+}
+
+/* ---------------- 折叠侧栏 ----------------
+   三态：
+     · 展开（默认） 侧栏在流内，地图占剩余宽度
+     · 收起         侧栏脱离文档流、平移出屏，地图铺满
+     · 速览         收起状态下鼠标靠左，侧栏滑回来盖在地图上（地图不回流） */
+
+/* 只留一列。不能写成 `0 1fr`：侧栏一旦绝对定位就不再参与网格排布，
+   地图面板会顶上来当第一个在流内的网格项，被塞进那个 0 宽的列里，结果地图宽度变成 0 */
+.body.is-collapsed {
+  grid-template-columns: 1fr;
+}
+
+.body.is-collapsed .sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(420px, 86%);
+  z-index: 30;
+  transform: translateX(-100%);
+  box-shadow: 14px 0 36px -20px rgba(38, 33, 26, 0.5);
+  transition: transform 0.28s var(--ease);
+}
+
+.body.is-collapsed.is-peek .sidebar {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body.is-collapsed .sidebar {
+    transition: none;
+  }
+}
+
+/* 开关按钮：骑在分界线上；收起后贴地图左缘。
+   z-index 要高于速览中的侧栏，不然浮出时点不到它 */
+.rail-toggle {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 40px;
+  border-radius: 0 8px 8px 0;
+  color: var(--text-lo);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--rule-strong);
+  border-left: none;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(14px);
+  transform: translateX(-58%);
+  transition: color 0.18s var(--ease), background 0.18s var(--ease),
+    transform 0.28s var(--ease);
+}
+
+.rail-toggle:hover {
+  color: var(--gold-ink);
+  background: var(--paper-0);
+}
+
+.rail-toggle svg {
+  transition: transform 0.28s var(--ease);
+}
+
+.body.is-collapsed .rail-toggle {
+  transform: none;
+  border-left: 1px solid var(--rule-strong);
+  border-radius: 0 8px 8px 0;
+}
+
+.body.is-collapsed .rail-toggle svg {
+  transform: rotate(180deg);
+}
+
+.sidebar {
+  min-width: 0;
+  /* min-height:0 是关键：网格项默认 min-height:auto，会被内容撑高，
+     导致内部 flex:1 + overflow-y:auto 的 .sidebar__scroll 永远没有可滚空间 */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* 兜底：侧栏是有确定高度的 flex 列，任何子项都不该越出它。
+     一旦越出，多出来的部分会被 body 的 overflow:hidden 裁掉且永远够不着。 */
+  overflow: hidden;
+  background: var(--paper-0);
+  border-right: 1px solid var(--rule);
+}
+
+.sidebar__head {
+  /* 不是 flex:none：窗口极矮时标题区必须让位，否则会把滚动区挤到没有高度 */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sidebar__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--text-lo);
+  text-transform: uppercase;
+}
+
+.sidebar__title {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 700;
+  margin: 6px 0 8px;
+  line-height: 1.35;
+}
+
+.sidebar__summary {
+  font-size: 13px;
+  color: var(--text-mid);
+  margin: 0;
+}
+
+/* 当日统计条 */
+.daystats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px dashed var(--rule-strong);
+}
+
+.daystat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.daystat__value {
+  font-family: var(--font-num);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--gold-ink);
+  line-height: 1;
+}
+
+.daystat__unit {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 下内边距不能留在这里。box-sizing:border-box 下内边距构成容器的「最小高度」，
+     而 flex 项无法缩到内边距以下 —— 窗口一矮，这个 82px 的硬底就把滚动区
+     顶出侧栏，越界部分被 body 的 overflow:hidden 裁掉，底部永远翻不到。
+     底部留白改由 ::after 撑，它属于滚动内容，不会给容器设下限。 */
+  padding: 22px 24px 0;
+  scroll-behavior: smooth;
+}
+
+/* 滚动内容末尾的呼吸位，替代原来的 padding-bottom */
+.sidebar__scroll::after {
+  content: '';
+  display: block;
+  height: 60px;
+}
+
+/* ---------------- 地图栏 ---------------- */
+
+.map-panel {
+  position: relative;
+  min-width: 0;
+  background: var(--paper-2);
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+/* 地图加载指示 */
+.map-status {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--text-mid);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--rule-strong);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+
+.map-status.is-on {
+  opacity: 1;
+  transform: none;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-line);
+  border-top-color: var(--gold-ink);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 地图加载失败 / key 未配置的提示 */
+.map-error {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px;
+  text-align: center;
+  background: var(--paper-1);
+}
+
+.map-error.is-on {
+  display: grid;
+}
+
+.map-error h3 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  margin: 0;
+}
+
+.map-error p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-mid);
+  max-width: 460px;
+}
+
+.map-error code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  color: var(--gold-ink);
+}
+
+/* ---------------- 响应式 ---------------- */
+
+/* 窗口很矮时（小窗、或浏览器底部开了调试栏），标题区主动瘦身：
+   简介先让位，把高度留给真正要看的时间轴 */
+@media (max-height: 560px) {
+  .sidebar__head {
+    padding: 12px 24px 10px;
+  }
+
+  .sidebar__title {
+    font-size: 19px;
+    margin: 4px 0 0;
+  }
+
+  .sidebar__summary {
+    display: none;
+  }
+
+  .daystats {
+    margin-top: 9px;
+    padding-top: 8px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .band__anchors {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .band__anchors .anchor:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  body {
+    overflow: auto;
+  }
+
+  .app {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .band {
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 16px 18px;
+  }
+
+  .band__brand {
+    /* 窄屏下品牌区独占一行并允许收缩：
+       否则 flex:none + 不换行的标签会把页面撑出横向滚动条 */
+    flex: 1 1 100%;
+    min-width: 0;
+    padding-right: 0;
+    border-right: none;
+  }
+
+  .band__meta {
+    min-width: 0;
+  }
+
+  .band__anchors {
+    flex-basis: 100%;
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+
+  .band__anchors .anchor:last-child {
+    display: flex;
+  }
+
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    order: 2;
+  }
+
+  .sidebar__scroll {
+    overflow: visible;
+    max-height: none;
+  }
+
+  .map-panel {
+    order: 1;
+    height: 58vh;
+    min-height: 380px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /* 窄屏本来就是上下堆叠的，没有「折叠侧栏」这回事，把开关和折叠态一起关掉 */
+  .rail-toggle {
+    display: none;
+  }
+
+  .body.is-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .body.is-collapsed .sidebar {
+    position: static;
+    width: auto;
+    transform: none;
+    box-shadow: none;
+    transition: none;
+  }
+}

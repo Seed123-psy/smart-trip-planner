@@ -1,0 +1,9 @@
+# 统一换行符为 LF。
+# 本仓库源码原本就是 LF，若不固定，Windows 上签出会被转成 CRLF，
+# 之后每次 diff 都会出现整文件级的"改动"，掩盖真实修改。
+* text=auto eol=lf
+
+# 二进制资源不参与换行转换
+*.png binary
+*.jpg binary
+*.ico binary

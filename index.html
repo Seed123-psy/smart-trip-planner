@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>武汉 · 国庆行程攻略</title>
+  <meta name="description" content="2026 国庆武汉三天行程：路线、时间与距离一览" />
+  <!-- 私人攻略，不希望被搜索引擎收录：链接只发给同行的人 -->
+  <meta name="robots" content="noindex, nofollow" />
+
+  <meta name="theme-color" content="#faf8f4" />
+
+  <!-- 内联 favicon（定位针，描边色取古铜），避免多一次 404 请求 -->
+  <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b8801f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/><circle cx='12' cy='10' r='3'/></svg>"
+  />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <link rel="stylesheet" href="styles/prep.css" />
+  <link rel="stylesheet" href="styles/map.css" />
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- ================= 顶部关键信息带 ================= -->
+    <header class="band rise">
+      <div class="band__brand">
+        <h1 class="band__city" id="city">武汉</h1>
+        <div class="band__meta">
+          <span class="band__dates num" id="date-range"></span>
+          <div class="band__tags" id="tags"></div>
+        </div>
+        <!-- 当前实况，由 scripts/weather.js 取数、app.js 渲染；取不到时保持隐藏 -->
+        <div class="wx wx--live" id="wx-live" hidden></div>
+
+        <button
+          class="prep-open"
+          id="prep-open"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="prep"
+        >
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M11 6h10M11 12h10M11 18h10" />
+            <path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17" />
+          </svg>
+          <span>行前准备</span>
+        </button>
+      </div>
+      <div class="band__anchors" id="anchors"></div>
+    </header>
+
+    <!-- ================= 日切换 ================= -->
+    <nav class="daybar" id="daybar" aria-label="按天切换行程"></nav>
+
+    <!-- ================= 主体：时间轴 + 地图 ================= -->
+    <main class="body">
+
+      <section class="sidebar" id="sidebar">
+        <div class="sidebar__head">
+          <span class="sidebar__eyebrow" id="day-eyebrow"></span>
+          <h2 class="sidebar__title" id="day-title"></h2>
+          <p class="sidebar__summary" id="day-summary"></p>
+          <!-- 当日天气；行程日超出高德 4 天预报窗口时改为显示「何时可查」 -->
+          <div class="wx wx--day" id="wx-day" hidden></div>
+          <div class="daystats" id="day-stats"></div>
+        </div>
+        <div class="sidebar__scroll" id="sidebar-scroll"></div>
+      </section>
+
+      <section class="map-panel">
+        <div id="map"></div>
+
+        <!-- 折叠侧的开关。骑在侧栏与地图的分界线上，收起后贴地图左缘 -->
+        <button
+          class="rail-toggle"
+          id="rail-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="sidebar"
+          aria-label="收起侧栏"
+        >
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="15"
+            height="15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+
+        <div class="map-status" id="map-status">
+          <span class="spinner"></span>
+          <span>正在规划路线…</span>
+        </div>
+
+        <!-- 高德未返回真实路径时，明示图上画的是示意直线，避免误导 -->
+        <div class="map-note" id="map-note">
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="13"
+            height="13"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z" />
+            <path d="M12 9v4M12 17h.01" />
+          </svg>
+          <span>未取到真实道路路径，图中路线为示意直线</span>
+        </div>
+
+        <div class="map-error" id="map-error">
+          <h3>地图暂时没能加载出来</h3>
+          <p></p>
+          <p>
+            行程时间轴不受影响，仍可正常查看。修复后刷新页面即可。
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================= 行前准备抽屉 ================= -->
+  <div class="prep" id="prep" role="dialog" aria-modal="true" aria-labelledby="prep-title">
+    <div class="prep__panel">
+      <header class="prep__head">
+        <div>
+          <span class="prep__eyebrow">出发前过一遍</span>
+          <h2 class="prep__title" id="prep-title">行前准备</h2>
+        </div>
+        <button class="prep__close" id="prep-close" type="button" aria-label="关闭行前准备">
+          <svg
+            class="ic"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </header>
+      <div class="prep__body" id="prep-body"></div>
+    </div>
+  </div>
+
+  <!-- 数据层：改行程只需动 data/ 下的文件 -->
+  <script src="config.js"></script>
+  <script src="data/poi.js"></script>
+  <script src="data/itinerary.js"></script>
+  <script src="data/prep.js"></script>
+  <script src="data/routes-legs.js"></script>
+
+  <!-- 高德 JSAPI Loader（官方 CDN） -->
+  <script src="https://webapi.amap.com/loader.js"></script>
+
+  <!-- 应用层：date 与 weather 在前，prep 依赖 timeline 的图标构造器，app 最后编排 -->
+  <script src="scripts/date.js"></script>
+  <script src="scripts/weather.js"></script>
+  <script src="scripts/route.js"></script>
+  <script src="scripts/map.js"></script>
+  <script src="scripts/timeline.js"></script>
+  <script src="scripts/prep.js"></script>
+  <script src="scripts/app.js"></script>
+</body>
+</html>

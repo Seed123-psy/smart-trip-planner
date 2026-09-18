@@ -1,0 +1,408 @@
+/* ============================================================
+   行前准备：顶栏入口按钮 + 右侧抽屉
+   单独成文件是因为 components.css 已接近 400 行，按项目的文件体量约定该拆
+   ============================================================ */
+
+/* ---------------- 顶栏入口 ---------------- */
+
+.prep-open {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px 5px 11px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--text-mid);
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-1);
+  white-space: nowrap;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+.prep-open:hover {
+  color: var(--gold-ink);
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+
+.prep-open svg {
+  opacity: 0.85;
+}
+
+/* ---------------- 遮罩 ---------------- */
+
+.prep {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  justify-content: flex-end;
+  background: rgba(31, 27, 21, 0.34);
+  backdrop-filter: blur(2px);
+}
+
+.prep.is-on {
+  display: flex;
+  animation: fade 0.2s var(--ease) both;
+}
+
+/* ---------------- 面板 ---------------- */
+
+.prep__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  height: 100%;
+  background: var(--paper-0);
+  border-left: 1px solid var(--rule);
+  box-shadow: -18px 0 46px -22px rgba(38, 33, 26, 0.4);
+  animation: prep-in 0.28s var(--ease) both;
+}
+
+@keyframes prep-in {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prep__panel {
+    animation: none;
+  }
+}
+
+.prep__head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.prep__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--text-lo);
+}
+
+.prep__title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 5px 0 0;
+  line-height: 1.3;
+}
+
+.prep__close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--text-lo);
+  border: 1px solid var(--rule);
+  transition: color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.prep__close:hover {
+  color: var(--text-hi);
+  background: var(--paper-2);
+}
+
+.prep__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* 下内边距留在这里是安全的：抽屉是 fixed 定位、高度写死 100%，
+     不存在侧栏那种「内边距把容器顶出可视区」的问题 */
+  padding: 4px 22px 44px;
+}
+
+/* ---------------- 分区 ---------------- */
+
+.prep-sec {
+  padding: 20px 0;
+  border-bottom: 1px dashed var(--rule-strong);
+}
+
+.prep-sec:last-child {
+  border-bottom: none;
+}
+
+.prep-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: var(--gold-ink);
+}
+
+.prep-sec__title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-hi);
+}
+
+/* ---------------- 待预约 ---------------- */
+
+.prep-booking {
+  padding: 11px 13px 12px;
+  margin-bottom: 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule);
+  background: var(--paper-1);
+}
+
+.prep-booking.is-must {
+  border-color: rgba(168, 56, 42, 0.26);
+  background: rgba(168, 56, 42, 0.05);
+}
+
+.prep-booking__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.prep-booking__name {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+.prep-booking__level {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: var(--text-lo);
+  border: 1px solid var(--rule-strong);
+}
+
+.prep-booking__level.is-must {
+  color: var(--paper-0);
+  background: var(--cinnabar);
+  border-color: var(--cinnabar);
+  font-weight: 700;
+}
+
+.prep-booking__when {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+
+.prep-booking__date {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-hi);
+}
+
+.prep-booking__count {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.prep-booking__count.is-urgent {
+  color: var(--cinnabar);
+  font-weight: 700;
+}
+
+.prep-booking__channel {
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+.prep-booking__note {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-lo);
+}
+
+/* ---------------- 说明段落 / 键值对 ---------------- */
+
+.prep-lead {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-mid);
+}
+
+.prep-list {
+  margin: 0;
+  padding-left: 17px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-lo);
+}
+
+.prep-list li + li {
+  margin-top: 5px;
+}
+
+.prep-pair {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.prep-pair:last-child {
+  border-bottom: none;
+}
+
+.prep-pair__k {
+  flex: none;
+  width: 110px;
+  color: var(--text-mid);
+}
+
+.prep-pair__v {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-hi);
+}
+
+.prep-pair__note {
+  font-size: 11px;
+  color: var(--text-lo);
+  line-height: 1.65;
+}
+
+/* 键值对在窄容器里竖排更易读（雨天备选、实用信息那种长值） */
+.prep-pair.is-wide {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prep-pair.is-wide .prep-pair__k {
+  width: auto;
+  color: var(--text-hi);
+  font-weight: 500;
+}
+
+.prep-pair.is-wide .prep-pair__v {
+  font-size: 11.5px;
+  color: var(--text-lo);
+}
+
+/* ---------------- 必带物品 ---------------- */
+
+.prep-pack__count {
+  font-size: 11px;
+  color: var(--text-lo);
+  margin-bottom: 10px;
+}
+
+.prep-pack__count.is-done {
+  color: var(--travel);
+  font-weight: 500;
+}
+
+.prep-pack__group + .prep-pack__group {
+  margin-top: 14px;
+}
+
+.prep-pack__title {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--text-lo);
+  margin-bottom: 7px;
+}
+
+.prep-pack__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-mid);
+  cursor: pointer;
+}
+
+/* 视觉上隐藏原生复选框，但保留可聚焦、可被读屏识别 */
+.prep-pack__item input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.prep-pack__box {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  border: 1.5px solid var(--rule-strong);
+  color: transparent;
+  background: var(--paper-0);
+  transition: background 0.16s var(--ease), border-color 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.prep-pack__item:hover .prep-pack__box {
+  border-color: var(--gold-line);
+}
+
+.prep-pack__item input:checked + .prep-pack__box {
+  background: var(--gold-ink);
+  border-color: var(--gold-ink);
+  color: var(--paper-0);
+}
+
+/* 原生输入框被藏了，焦点环得手动补到方框上 */
+.prep-pack__item input:focus-visible + .prep-pack__box {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+.prep-pack__item.is-done .prep-pack__text {
+  color: var(--text-lo);
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-strong);
+}
+
+/* ---------------- 响应式 ---------------- */
+
+@media (max-width: 560px) {
+  .prep__panel {
+    width: 100%;
+  }
+
+  .prep__body {
+    padding: 4px 16px 40px;
+  }
+
+  .prep-pair__k {
+    width: 84px;
+  }
+}

@@ -1,0 +1,150 @@
+/* ============================================================
+   地图层样式：自定义标记 + 高德控件浅色适配
+   标记用 CSS 绘制水滴形，避免额外的图片依赖
+   ============================================================ */
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------------- 自定义标记 ---------------- */
+
+.pin {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  background: var(--hue, #b07510);
+  /* 水滴形：clip-path 削出顶端圆弧与底部尖角，
+     border-radius 让尖角带点弧度，避免生硬的三角 */
+  border-radius: 50% 50% 50% 50% / 42% 42% 58% 58%;
+  clip-path: polygon(50% 100%, 100% 62%, 100% 42%, 50% 0, 0 42%, 0 62%);
+  color: #fff;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  padding-bottom: 7px;
+  /* 浅色底图上不用深色描边（会显脏），靠柔和投影把标记从底图上「抬」起来 */
+  filter: drop-shadow(0 1px 2px rgba(38, 33, 26, 0.35))
+    drop-shadow(0 4px 10px rgba(38, 33, 26, 0.22));
+  cursor: pointer;
+  transition: transform 0.18s var(--ease);
+}
+
+.pin:hover {
+  transform: translateY(-3px) scale(1.08);
+}
+
+/* 行程锚点（机场 / 酒店）加重：更大、投影更深 */
+.pin--airport,
+.pin--hotel {
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+  filter: drop-shadow(0 2px 4px rgba(38, 33, 26, 0.38))
+    drop-shadow(0 6px 14px rgba(38, 33, 26, 0.26));
+}
+
+.pin--hotel {
+  --hue: #a8382a !important;
+}
+
+.pin--airport {
+  --hue: #2a5fc4 !important;
+}
+
+/* 脉冲提示：地图上没有默认选中的点，靠这个引导视线到起点 */
+.pin::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid var(--hue, #b07510);
+  opacity: 0;
+  animation: ping 2.6s ease-out infinite;
+}
+
+.pin--airport::after,
+.pin--hotel::after {
+  animation-delay: 0.4s;
+}
+
+@keyframes ping {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pin::after {
+    animation: none;
+  }
+}
+
+/* 示意直线提示：高德没返回真实路径时明示，避免把直线当成实际路线 */
+.map-note {
+  position: absolute;
+  bottom: 18px;
+  right: 16px;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  color: var(--cinnabar);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(168, 56, 42, 0.26);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(14px);
+}
+
+.map-note.is-on {
+  display: flex;
+}
+
+/* ---------------- 高德控件浅色适配 ---------------- */
+
+/* 高德 logo 是深色字，浅色底上不需要反相，压低存在感即可 */
+.amap-logo,
+.amap-copyright {
+  opacity: 0.4;
+  /* 移动端不要盖住比例尺与自定义控件 */
+  pointer-events: none;
+}
+
+.amap-scale-text,
+.amap-scale-line {
+  color: var(--text-lo) !important;
+  border-color: var(--rule-strong) !important;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.amap-touch-toolbar .amap-button-group {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.amap-touch-toolbar .amap-button-group button {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: var(--rule) !important;
+}
+
+/* 高德自带的路径/信息面板不展示，信息统一由左栏时间轴承载 */
+.amap-lib-driving,
+.amap-lib-walking,
+.amap-lib-transfer,
+.amap-info-content {
+  display: none !important;
+}

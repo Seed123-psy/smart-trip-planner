@@ -1,0 +1,192 @@
+/* ============================================================
+   设计令牌 + 基础重置
+   视觉方向：素纸旅行手账 —— 暖白纸面、暖墨字、古铜描边、衬线汉字标题
+
+   色值取舍（浅色主题的硬约束，改色前请先读）：
+   - 正文对比度必须 ≥ 4.5:1。--text-lo 是小号提示字，最容易踩线，
+     实测 #786e61 在 --paper-1 上约 4.8:1，不要再调浅。
+   - 强调色承载文字时（时间戳、统计值）另有 --gold-ink 一档，
+     装饰描边/填充才用更亮的 --gold-line / --gold-bright。
+   ============================================================ */
+
+:root {
+  /* 纸面层级：0 最亮（卡片），3 最深（填充、轨道底） */
+  --paper-0: #ffffff;
+  --paper-1: #faf8f4;
+  --paper-2: #f3efe8;
+  --paper-3: #e9e3d9;
+
+  /* 分隔线：暖灰，避免纯黑细线在纸上显得脏 */
+  --rule: rgba(38, 33, 26, 0.1);
+  --rule-strong: rgba(38, 33, 26, 0.18);
+
+  /* 文字：暖墨而非纯黑，和白纸的冷暖关系更自然 */
+  --text-hi: #1f1b15;
+  --text-mid: #5a5348;
+  --text-lo: #786e61;
+
+  /* 强调色：古铜。--gold-ink 承载文字，--gold-bright 只做装饰 */
+  --gold: #8a5a10;
+  --gold-ink: #8a5a10;
+  --gold-bright: #b8801f;
+  --gold-soft: rgba(138, 90, 16, 0.09);
+  --gold-line: rgba(138, 90, 16, 0.24);
+  --cinnabar: #a8382a;
+  /* 路途语义色：交通连接段的耗时、距离条。刻意与「时刻」的古铜分开 */
+  --travel: #0b7a5f;
+
+  /* 每日主题色。地图侧同名的 DAY_HUE 在 config.js，改色记得一起改 */
+  --day1: #b07510;
+  --day2: #0b7a5f;
+  --day3: #a3377a;
+  --day4: #2a5fc4;
+  --day-active: var(--day1);
+
+  /* 字体 */
+  --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+  --font-ui: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-num: 'Barlow Condensed', 'Oswald', sans-serif;
+
+  /* 尺度 */
+  --rail: 30px;
+  --radius: 14px;
+  --radius-sm: 9px;
+
+  /* 浅色主题的层次靠「大范围低透明度」而不是「黑色硬阴影」，
+     否则会像贴纸浮在白纸上。两层叠加：贴地一层 + 扩散一层。 */
+  --shadow-card: 0 1px 2px rgba(38, 33, 26, 0.05),
+    0 4px 12px -4px rgba(38, 33, 26, 0.1);
+  --shadow-raise: 0 1px 2px rgba(38, 33, 26, 0.06),
+    0 14px 30px -12px rgba(38, 33, 26, 0.18);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper-1);
+  color: var(--text-hi);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* 纸面氛围：暖色斜向晕染 + 极淡噪点。
+   浅色下大面积纯白容易显得单薄发灰，靠这个把纸感垫起来。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(110% 70% at 6% 0%, rgba(184, 128, 31, 0.05), transparent 58%),
+    radial-gradient(90% 70% at 100% 100%, rgba(42, 95, 196, 0.04), transparent 60%);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+a {
+  color: var(--gold-ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--gold-line);
+}
+
+/* 键盘可达性：浅色主题下默认焦点环几乎看不见，统一补一个 */
+:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 数字统一用窄体，行程表靠这个撑起「时刻表」的质感 */
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* 内联 SVG 图标：统一走 currentColor，颜色跟随所在容器 */
+.ic {
+  flex: none;
+  display: block;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(38, 33, 26, 0.18);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(38, 33, 26, 0.3);
+  background-clip: content-box;
+}
+
+/* ---------- 入场动画 ---------- */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.rise {
+  animation: rise 0.5s var(--ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

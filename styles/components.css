@@ -1,0 +1,501 @@
+/* ============================================================
+   时间轴组件：行程点卡片 + 交通连接段 + 路线概览条
+   色彩语义贯穿全页：古铜 = 时刻，青绿 = 路途，灰 = 待规划
+   ============================================================ */
+
+.timeline {
+  position: relative;
+  padding-left: var(--rail);
+}
+
+/* 竖向轨迹线 */
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--rule-strong) 6%,
+    var(--rule-strong) 94%,
+    transparent
+  );
+}
+
+/* ---------------- 行程点 ---------------- */
+
+.stop {
+  position: relative;
+  margin-bottom: 2px;
+}
+
+.stop__dot {
+  position: absolute;
+  left: calc(-1 * var(--rail) + 0px);
+  top: 22px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--paper-0);
+  border: 2px solid var(--day-hue, var(--gold));
+  transition: box-shadow 0.25s var(--ease), transform 0.25s var(--ease);
+}
+
+.stop__dot::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--day-hue, var(--gold));
+  opacity: 0;
+  transition: opacity 0.25s var(--ease);
+}
+
+.stop.is-active .stop__dot::after {
+  opacity: 1;
+}
+
+.stop.is-active .stop__dot {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--day-hue, var(--gold)) 16%, transparent);
+}
+
+.stop--pending .stop__dot {
+  border-style: dashed;
+  border-color: var(--text-lo);
+}
+
+/* 卡片本体 */
+.stop__card {
+  position: relative;
+  padding: 13px 16px 14px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--rule);
+  background: var(--paper-0);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: border-color 0.22s var(--ease), transform 0.22s var(--ease),
+    box-shadow 0.22s var(--ease);
+}
+
+.stop__card:hover {
+  border-color: var(--rule-strong);
+  transform: translateX(2px);
+  box-shadow: var(--shadow-raise);
+}
+
+.stop.is-active .stop__card {
+  border-color: color-mix(in srgb, var(--day-hue, var(--gold)) 45%, transparent);
+  background: color-mix(in srgb, var(--day-hue, var(--gold)) 5%, var(--paper-0));
+  box-shadow: var(--shadow-raise);
+}
+
+/* 左侧色条：标记当前行程点所属主题色 */
+.stop__card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 99px;
+  background: var(--day-hue, var(--gold));
+  opacity: 0.45;
+  transition: opacity 0.22s var(--ease);
+}
+
+.stop.is-active .stop__card::before {
+  opacity: 1;
+}
+
+/* 待规划：虚线 + 降饱和，一眼区分「已知」与「待补」 */
+.stop--pending .stop__card {
+  border-style: dashed;
+  background: var(--paper-1);
+  box-shadow: none;
+}
+
+.stop--pending .stop__card::before {
+  background: var(--text-lo);
+}
+
+.stop__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.stop__time {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--gold-ink);
+  line-height: 1;
+}
+
+.stop--pending .stop__time {
+  color: var(--text-mid);
+}
+
+.stop__title {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0;
+  min-width: 0;
+}
+
+/* 徽标容器。margin-left:auto 在这里而不在 .stop__badge 上：
+   一个点可能同时挂「必玩」和「需预约」两枚，各自带 auto 会被拉开 */
+.stop__badges {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.stop__badge {
+  flex: none;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: var(--text-lo);
+  border: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+
+/* 需预约：这是唯一「不办就真进不去」的事，用实心朱砂和「必玩」的古铜分开 */
+.stop__badge--book {
+  color: var(--paper-0);
+  background: var(--cinnabar);
+  border-color: var(--cinnabar);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* 门票：只标要花钱的，纯信息性，压低存在感 */
+.stop__badge--ticket {
+  color: var(--text-mid);
+}
+
+.stop__badge--stay {
+  color: var(--gold-ink);
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+
+/* 闭馆/停业提醒：用警示红，和「停留时长」的古铜色区分开 */
+.stop__badge--warn {
+  color: var(--cinnabar);
+  border-color: rgba(168, 56, 42, 0.28);
+  background: rgba(168, 56, 42, 0.08);
+}
+
+/* 必玩点：实心古铜小标签，扫一眼就知道哪些不能跳过 */
+.stop__badge--hot {
+  color: var(--paper-0);
+  background: var(--gold-ink);
+  border-color: var(--gold-ink);
+  font-weight: 700;
+}
+
+.stop__desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-mid);
+  line-height: 1.75;
+}
+
+.stop__addr {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--text-lo);
+}
+
+.stop__addr svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+/* ---------------- 交通连接段 ---------------- */
+
+/* 负偏移把连接段拉回轨道线，与圆点同列 */
+.leg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0 10px;
+  margin-left: calc(-1 * var(--rail) + 22px);
+  min-height: 40px;
+}
+
+/* 虚线轨道，从上一站圆点连到下一站圆点 */
+.leg::before {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-image: linear-gradient(180deg, var(--rule-strong) 0 4px, transparent 4px 8px);
+  background-size: 1px 8px;
+}
+
+.leg__icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  color: var(--text-mid);
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.leg:hover .leg__icon {
+  color: var(--travel);
+  border-color: color-mix(in srgb, var(--travel) 30%, transparent);
+}
+
+.leg__text {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+.leg__mode {
+  color: var(--text-lo);
+  font-size: 11px;
+}
+
+.leg__dist {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-hi);
+  line-height: 1;
+}
+
+.leg__dur {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--travel);
+  line-height: 1;
+}
+
+.leg__est {
+  font-size: 10px;
+  color: var(--text-lo);
+  border: 1px dashed var(--rule-strong);
+  border-radius: 99px;
+  padding: 0 6px;
+}
+
+/* 出行提醒。flex-basis:100% 让它自己换到下一行，
+   不用把 .leg 从横向 flex 改成上下结构 */
+.leg__advice {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 1px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-lo);
+}
+
+.leg__advice svg {
+  margin-top: 3px;
+  opacity: 0.75;
+}
+
+/* 距离可视化：条形宽度随距离增长，一眼看出当天哪段路最远 */
+.leg__bar {
+  flex: 1;
+  min-width: 24px;
+  max-width: 120px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--paper-3);
+  overflow: hidden;
+}
+
+.leg__bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--travel) 40%, transparent), var(--travel));
+  transition: width 0.6s var(--ease);
+}
+
+/* ---------------- 路线概览条 ---------------- */
+
+.overview {
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--gold-line);
+  background: linear-gradient(150deg, var(--gold-soft), rgba(255, 255, 255, 0));
+}
+
+.overview__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.overview__title {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-lo);
+}
+
+.overview__total {
+  font-family: var(--font-num);
+  font-size: 15px;
+  color: var(--gold-ink);
+}
+
+.overview__track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.overview__seg {
+  height: 6px;
+  min-width: 6px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--day-hue, var(--gold)) 48%, transparent);
+  opacity: 0.9;
+}
+
+.overview__scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+
+/* ---------------- 天气 ---------------- */
+
+.wx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-mid);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* 必须显式写：上面那条 display:flex 会盖掉 [hidden] 自带的 display:none，
+   没有这一条，取不到天气时组件藏不住，会留个空壳在版面上 */
+.wx[hidden] {
+  display: none;
+}
+
+.wx svg {
+  color: var(--gold-ink);
+  opacity: 0.85;
+}
+
+.wx__temp {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-hi);
+  line-height: 1;
+}
+
+.wx__text {
+  font-size: 12px;
+  color: var(--text-mid);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wx__meta {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+/* 顶栏实况：一枚描边小标签 */
+.wx--live {
+  padding: 4px 11px 4px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-1);
+}
+
+.wx--live .wx__temp {
+  font-size: 16px;
+}
+
+/* 侧栏当日：与下面的统计条同属「当日信息」，所以不加边框 */
+.wx--day {
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 预报未覆盖该日：降饱和，和真实预报拉开区别，避免被当成预报读 */
+.wx--day.is-pending,
+.wx--day.is-pending .wx__text {
+  color: var(--text-lo);
+}
+
+.wx--day.is-pending svg {
+  color: var(--text-lo);
+  opacity: 0.55;
+}
+
+/* ---------------- 待规划占位提示 ---------------- */
+
+.pending-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--rule-strong);
+  font-size: 12px;
+  color: var(--text-lo);
+  line-height: 1.7;
+}
+
+.pending-note svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.pending-note code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--paper-2);
+  color: var(--gold-ink);
+}
