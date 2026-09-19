@@ -137,8 +137,17 @@
     </form>
   </aside>
 
-  <!-- 数据层：改行程只需动 data/ 下的文件。首页不需要行程数据，故不加载 data/*.js 与 app.js -->
+  <!-- 数据层：改行程只需动 data/ 下的文件。
+       ← 这里原先写的是「首页不需要行程数据，故不加载 data/*.js」。
+       改了：首页的墨绘演示画的就是内置那份武汉行程的**四天真实路线**
+       （机场落地 → 每天绕一圈回酒店 → 最后一天回机场）。
+
+       用 routes-legs.js 而不是 itinerary.js + poi.js，是因为它多了**真实道路几何** ——
+       后两者只有点位，画出来是点对点的直线，一眼就能看出不是路。
+       几何是 tools/generate-routes.js 在构建期向高德要来的，首页只管读，
+       运行时一个请求都不发。 -->
   <script src="config.js"></script>
+  <script src="data/routes-legs.js"></script>
   <!-- 紧跟 config.js：它要尽早发出 /api/config 请求。读 CFG.AMAP 的 hero-map.js
        会在自己的 init 里 await 它，其余脚本读的是 TRIP / DAY_HUE，不受影响 -->
   <script src="scripts/runtime-config.js"></script>

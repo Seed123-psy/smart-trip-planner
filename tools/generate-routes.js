@@ -33,8 +33,22 @@ const CACHE_FILE = path.join(CACHE_DIR, 'amap-cache.json');
  *
  * 这是个一次性生成器，所以在这里取一次并缓存下来。
  */
-const WEB_SERVICE_KEY = (() => {
-  const resolved = require('./keys').resolveAmapServiceKey();
+let WEB_SERVICE_KEY = '';
+
+/**
+ * 取一次密钥，缓存进 WEB_SERVICE_KEY。
+ *
+ * 【为什么不能像以前那样在模块顶层同步取】
+ * 密钥解析迁到 MySQL 之后变成了异步的：它要先开库、读 settings 表，
+ * 库读不出来还要按「解不开也不回落」的规则报错。以前那条
+ * `const resolved = resolveAmapServiceKey()` 拿到的其实是个 Promise，
+ * `resolved.value` 永远是 undefined —— 于是不管密钥配得多齐，
+ * 这里都会走到「三个来源都没有」那一句。
+ *
+ * CommonJS 没有顶层 await，所以挪进 main 里等。
+ */
+async function resolveWebServiceKey() {
+  const resolved = await require('./keys').resolveAmapServiceKey();
   if (resolved.value) return resolved.value;
 
   if (resolved.problem) throw new Error(resolved.problem);
@@ -42,7 +56,7 @@ const WEB_SERVICE_KEY = (() => {
     '未找到高德 Web 服务密钥。三个来源都没有：环境变量 AMAP_WEB_SERVICE_KEY、' +
       '管理后台的密钥设置、以及本地的 config.local.js。'
   );
-})();
+}
 
 const MODES = ['driving', 'transit', 'walking'];
 const MODE_LABEL = { driving: '驾车', transit: '公交', walking: '步行' };
@@ -253,6 +267,149 @@ async function geocode(poi, cache) {
 /* 2. 路径规划                                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 把高德给的点串拼起来、再抽稀成一条能画线的点列。
+ *
+ * 【为什么要抽稀】
+ * 一段 3 km 的路，高德可能返回上百个点。四天 27 段全量存下来是几十万字符，
+ * 而首页只是拿它画一条 2.6px 宽的墨线 —— 多出来的精度肉眼根本看不出，
+ * 却要跟着首页一起下载。抽到大约每 60 米一个点，画出来与原始几何无异。
+ *
+ * 首尾点必须保留：它们是行程点本身，丢一个站的位置就偏了。
+ */
+function thinPolyline(rawPairs, minGapDeg) {
+  const raw = String(rawPairs || '')
+    .split(';')
+    .map((pair) => pair.split(',').map(Number))
+    .filter((p) => p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (raw.length <= 2) return raw.map((p) => `${p[0]},${p[1]}`).join(';');
+
+  // 约 120 米。60 米时四天仍有 2400 个点，而首页画的是 2.6px 宽的墨线 ——
+  // 再密的点在那个尺度上完全看不出差别，只是白占体积
+  const gap = minGapDeg || 0.0012;
+  const out = [raw[0]];
+  for (let i = 1; i < raw.length - 1; i++) {
+    const prev = out[out.length - 1];
+    // 用曼哈顿距离而不是开方：只是拿来筛点，精度无所谓，省一次 sqrt
+    if (Math.abs(raw[i][0] - prev[0]) + Math.abs(raw[i][1] - prev[1]) >= gap) out.push(raw[i]);
+  }
+  out.push(raw[raw.length - 1]);
+
+  /* 存成 "lng,lat;lng,lat" 的字符串，而不是嵌套数组。
+     这一条是体积的关键：routes-legs.js 是用 JSON.stringify(data, null, 2) 写的，
+     嵌套数组里**每个数字各占一行**，同样两千多个点会从 40KB 涨到 600KB 以上。
+     用字符串既是一行，也正好是高德自己的 polyline 格式 ——
+     前端可以直接交给 TripRoute.parsePolyline 解析，不必再写一套。 */
+  return out.map((p) => `${p[0]},${p[1]}`).join(';');
+}
+
+/**
+ * 检索一批候选 POI，给首页的墨绘演示当「被筛掉的大多数」。
+ *
+ * 【为什么首页需要它】
+ * 演示要讲的是「高德先检索一大批地方、再筛出几个排进行程」。
+ * 而行程本身只有二十几个点 —— 全都留下就演不出「筛掉」这件事，
+ * 画面里只有一撮孤零零的点，看不出「检索」这个动作曾经发生过。
+ *
+ * 这批点**不参与行程**，只当背景，所以对它们唯一的要求就是
+ * 「真实存在于武汉」，不需要任何筛选逻辑。结果按坐标去重后写进缓存，
+ * 别每次重跑都去烧配额。
+ *
+ * @param {Array<[number, number]>} excludeCoords 行程点坐标 —— 与之重合的会被剔掉，
+ *        否则同一个位置会叠两个点（一个亮一个暗），看起来像闪烁
+ */
+async function fetchCandidates(cache, excludeCoords) {
+  const KEYWORDS = ['景点', '公园', '博物馆'];
+  const PAGES = [1, 2];
+
+  let raw;
+  if (typeof cache.candidates === 'string' && cache.candidates) {
+    raw = cache.candidates
+      .split(';')
+      .map((pair) => pair.split(',').map(Number))
+      .filter((p) => p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+    console.log(`  · 候选点 ${raw.length} 个（命中缓存）`);
+  } else {
+    raw = [];
+    const seen = new Set();
+    for (const keywords of KEYWORDS) {
+      for (const page of PAGES) {
+        try {
+          const json = await amapGet('/v3/place/text', {
+            keywords,
+            city: '武汉',
+            citylimit: 'true',
+            offset: 25,
+            page,
+            extensions: 'base',
+            output: 'JSON'
+          });
+          for (const poi of json.pois || []) {
+            const [lng, lat] = String(poi.location || '').split(',').map(Number);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+            // 去重按三位小数（约 100 米）：同一家店分店挨着也算一个点
+            const key = `${lng.toFixed(3)},${lat.toFixed(3)}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            raw.push([lng, lat]);
+          }
+          console.log(`  ✓ 候选点 [${keywords} 第${page}页] 累计 ${raw.length} 个`);
+        } catch (err) {
+          console.warn(`  ✗ 候选点 [${keywords} 第${page}页] ${err.message}`);
+        }
+      }
+    }
+    cache.candidates = raw.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(';');
+  }
+
+  // 剔掉与行程点重合的
+  const keep = raw.filter((c) =>
+    excludeCoords.every((t) => Math.abs(t[0] - c[0]) > 0.0008 || Math.abs(t[1] - c[1]) > 0.0008)
+  );
+  console.log(`  → 去掉与行程点重合的 ${raw.length - keep.length} 个，剩 ${keep.length} 个`);
+
+  // 同样用紧凑字符串：嵌套数组在 JSON.stringify 里每个数字占一行
+  return keep.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(';');
+}
+
+/** driving / walking 的几何：把所有 step 的点串接起来 */
+function stepsToPairs(steps) {
+  return (steps || [])
+    .map((s) => s.polyline)
+    .filter(Boolean)
+    .join(';');
+}
+
+/**
+ * transit 的几何要自己拼：它按「步行段 / 公交段 / 地铁段」拆开，
+ * 每段各有自己的点串，没有一条现成的整程折线。
+ * 漏掉任何一类都会让那段路凭空断开 —— 这条行程里过江的轮渡就在 buslines 里。
+ */
+function transitToPairs(transit) {
+  const parts = [];
+  for (const seg of (transit && transit.segments) || []) {
+    if (seg.walking && seg.walking.steps) parts.push(stepsToPairs(seg.walking.steps));
+    for (const line of (seg.bus && seg.bus.buslines) || []) {
+      if (line.polyline) parts.push(line.polyline);
+    }
+    for (const line of (seg.railway && seg.railway.buslines) || []) {
+      if (line.polyline) parts.push(line.polyline);
+    }
+    if (seg.railway && seg.railway.polyline) parts.push(seg.railway.polyline);
+    if (seg.taxi && seg.taxi.polyline) parts.push(seg.taxi.polyline);
+  }
+  return parts.filter(Boolean).join(';');
+}
+
+/**
+ * 算一段路。
+ *
+ * 【为什么现在要返回 polyline】
+ * 以前只取 distance/duration —— 那是给「左栏的距离耗时」用的。
+ * 但首页要画真实路网，直线连点是不行的（用户一眼就看出来不是路），
+ * 所以几何必须一起留下来。高德本来就把几何放在响应里，
+ * 之前只是读完距离就丢掉了。
+ */
 async function planRoute(from, to, mode, cityCode) {
   if (mode === 'walking') {
     const json = await amapGet('/v3/direction/walking', {
@@ -262,7 +419,11 @@ async function planRoute(from, to, mode, cityCode) {
     });
     const p = json.route && json.route.paths && json.route.paths[0];
     if (!p) throw new Error('无步行路径');
-    return { distance: Number(p.distance), duration: Number(p.duration) };
+    return {
+      distance: Number(p.distance),
+      duration: Number(p.duration),
+      polyline: thinPolyline(stepsToPairs(p.steps))
+    };
   }
 
   if (mode === 'transit') {
@@ -276,7 +437,11 @@ async function planRoute(from, to, mode, cityCode) {
     });
     const t = json.route && json.route.transits && json.route.transits[0];
     if (!t) throw new Error('无公交方案');
-    return { distance: Number(t.distance), duration: Number(t.duration) };
+    return {
+      distance: Number(t.distance),
+      duration: Number(t.duration),
+      polyline: thinPolyline(transitToPairs(t))
+    };
   }
 
   const json = await amapGet('/v3/direction/driving', {
@@ -288,7 +453,11 @@ async function planRoute(from, to, mode, cityCode) {
   });
   const p = json.route && json.route.paths && json.route.paths[0];
   if (!p) throw new Error('无驾车路径');
-  return { distance: Number(p.distance), duration: Number(p.duration) };
+  return {
+    distance: Number(p.distance),
+    duration: Number(p.duration),
+    polyline: thinPolyline(stepsToPairs(p.steps))
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -297,6 +466,9 @@ async function planRoute(from, to, mode, cityCode) {
 
 async function main() {
   console.log('── 武汉行程数据生成 ──────────────────────────────');
+
+  // 先拿密钥再开始：拿不到就直接退出，不要跑到一半才发现每段路都失败
+  WEB_SERVICE_KEY = await resolveWebServiceKey();
 
   const { data: poiWin } = loadBrowserData('data/poi.js');
   const { data: itinWin } = loadBrowserData('data/itinerary.js');
@@ -345,7 +517,15 @@ async function main() {
       const cacheKey = `${a.poiId}>${b.poiId}>${mode}`;
       let metrics = cache.routes[cacheKey];
 
-      if (!metrics || FORCE) {
+      /* 命中的缓存里必须有**主方式的几何**。
+         这版之前只存距离与耗时，几何读完就丢，所以旧缓存虽然「命中」，
+         却画不出真实路线 —— 首页只能退化成点对点的直线，
+         而直线恰恰是这次要修掉的东西。加这条判断让老缓存自动重算，
+         不必让人手动去删 tools/.cache。 */
+      const cachedShape =
+        metrics && metrics.modes && metrics.modes[mode] && metrics.modes[mode].polyline;
+
+      if (!metrics || !cachedShape || FORCE) {
         const records = {};
         for (const m of [mode, ...MODES.filter((x) => x !== mode)]) {
           try {
@@ -374,6 +554,14 @@ async function main() {
           }
         }
 
+        /* 只保留**主方式**的几何。
+           每段会对三种出行方式各算一遍（左栏的「打车还是地铁」要用对比数据），
+           但几何只有主方式用得上 —— 页面画的都是这一趟实际走的那条路。
+           三份都存的话 routes-legs.js 会凭空胖两倍，而另外两份永远不会被读。 */
+        for (const m of MODES) {
+          if (m !== mode && records[m]) delete records[m].polyline;
+        }
+
         metrics = {
           from: a.poiId,
           to: b.poiId,
@@ -396,8 +584,17 @@ async function main() {
     }
   }
 
-  /* --- 3.3 落盘 --- */
-  console.log('\n[3/3] 写出文件');
+  /* --- 3.3 候选点（只给首页的墨绘演示用，不进行程） --- */
+  console.log('\n[3/4] 检索演示用的候选点');
+  const candidates = await fetchCandidates(
+    cache,
+    Object.values(locations)
+      .filter(Boolean)
+      .map((l) => l.coords)
+  );
+
+  /* --- 3.4 落盘 --- */
+  console.log('\n[4/4] 写出文件');
   if (DRY) {
     console.log('  (--dry 模式，跳过写入)');
     return;
@@ -433,7 +630,11 @@ async function main() {
         .map(([k]) => k)
     },
     locations,
-    legs
+    legs,
+    /* 首页墨绘演示用的候选池（「被筛掉的大多数」）。
+       它们不属于任何一天的行程，只为了让画面能演出「检索一大批 → 筛出几个」。
+       同样存成 "lng,lat;lng,lat" 的紧凑串，理由与 polyline 一样：体积。 */
+    candidates
   };
   const out =
     '/**\n' +

@@ -25,21 +25,88 @@
 
   const NS = 'http://www.w3.org/2000/svg';
 
+  /* ------------------------------------------------------------------ */
+  /* 演示数据：直接用内置那份武汉行程                                        */
+  /* ------------------------------------------------------------------ */
+
+  /* ------------------------------------------------------------------ */
+  /* 演示数据：直接用内置那份武汉行程                                        */
+  /* ------------------------------------------------------------------ */
+
+  /** routes-legs.js 里的 polyline / candidates 都是 "lng,lat;lng,lat" 的紧凑串 */
+  function parsePairs(str) {
+    if (typeof str !== 'string' || !str) return [];
+    return str
+      .split(';')
+      .map((pair) => pair.split(',').map(Number))
+      .filter((p) => p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  }
+
   /**
-   * 演示用的坐标：真实武汉地标（取自 data/routes-legs.js 的定位结果）。
-   * 首页刻意不加载 data/*.js —— 它是门面，不该被某一份行程的数据拖着走。
-   * 一旦开始规划，这批点会被真实检索结果整批换掉。
+   * 四天的路线，从**构建期算好的** data/routes-legs.js 取。
+   *
+   * 【这里以前是一份手抄的 22 个坐标】
+   * 那段代码只画点、不画线 —— 而线才是整件事的重点：
+   * 点只是「搜到了这些地方」，线才是「排成了行程」。
+   *
+   * 【为什么现在读 routes-legs.js 而不是 itinerary.js】
+   * 后者只有点位，照它画出来是点对点的直线，一眼就能看出不是路。
+   * 真实几何是 generate-routes.js 在构建期向高德要来的，已经存在这里了 ——
+   * 首页直接读，运行时一次请求都不用发，也不占用高德配额。
+   *
+   * 演示画的就是真实的四天闭环（含机场与酒店）：
+   *   Day1 机场落地 → 酒店 → 汉口江滩一圈 → 回酒店
+   *   Day2 酒店 → 省博 → 东湖 → 武大 → 回酒店
+   *   Day3 酒店 → 昙华林 → 黄鹤楼 → 轮渡过江 → 回酒店
+   *   Day4 酒店 → 汉阳一圈 → 回酒店 → 机场
+   *
+   * 数据没加载上时返回空数组，调用方退回「只画点」。
    */
-  const DEMO_SPOTS = [
-    [114.314625, 30.607245, 1], [114.310208, 30.602394, 1], [114.299831, 30.586141, 1],
-    [114.299353, 30.587731, 1], [114.290521, 30.581672, 1], [114.292874, 30.547225, 1],
-    [114.305298, 30.543475, 1], [114.308791, 30.551940, 0], [114.293535, 30.584931, 0],
-    [114.340331, 30.554925, 0], [114.365261, 30.561633, 0], [114.376688, 30.564713, 0],
-    [114.364514, 30.536243, 0], [114.363807, 30.545119, 0], [114.310451, 30.547408, 0],
-    [114.302691, 30.547544, 0], [114.260079, 30.545484, 0], [114.268285, 30.556247, 0],
-    [114.260166, 30.557715, 0], [114.298180, 30.575127, 0], [114.294686, 30.550602, 0],
-    [114.225873, 30.618327, 0]
-  ];
+  function demoDays() {
+    const routes = window.TRIP_ROUTES;
+    if (!routes || !Array.isArray(routes.legs) || !routes.locations) return [];
+
+    const byDay = new Map();
+    for (const leg of routes.legs) {
+      if (!byDay.has(leg.dayId)) byDay.set(leg.dayId, []);
+      byDay.get(leg.dayId).push(leg);
+    }
+
+    const days = [];
+    for (const legs of byDay.values()) {
+      legs.sort((a, b) => a.fromIndex - b.fromIndex);
+
+      const stops = [];
+      const shape = [];
+
+      for (const leg of legs) {
+        const from = routes.locations[leg.from];
+        const to = routes.locations[leg.to];
+
+        if (from && from.coords && !stops.length) {
+          stops.push({ id: leg.from, name: from.formattedAddress, coords: from.coords });
+        }
+        if (to && to.coords) {
+          stops.push({ id: leg.to, name: to.formattedAddress, coords: to.coords });
+        }
+
+        // 几何取主方式那条 —— 构建期只给主方式留了 polyline
+        const primary = leg.modes && leg.modes[leg.primary];
+        const pts = parsePairs(primary && primary.polyline);
+        if (pts.length >= 2) {
+          // 相邻两段共享一个端点，拼接时去掉重复的那个，否则线上会出现回折
+          shape.push(...(shape.length ? pts.slice(1) : pts));
+        } else if (from && from.coords && to && to.coords) {
+          // 没有几何就退回直线。这是降级，不该让整天的线断掉
+          if (!shape.length) shape.push(from.coords);
+          shape.push(to.coords);
+        }
+      }
+
+      if (stops.length >= 2) days.push({ stops, shape });
+    }
+    return days;
+  }
 
   const svg = document.getElementById('hero-ink');
   if (!svg) return;
@@ -117,8 +184,37 @@
     };
   }
 
+  /**
+   * 演示用的**全部**点：检索回来的候选 + 被选中的行程点。
+   *
+   * 【为什么必须两类一起画】
+   * 演示要讲的是「先检索一大批、再筛出几个排进行程」。
+   * 只画行程那二十几个点的话，「筛掉」这件事根本没有对象 ——
+   * 画面里只剩一撮孤零零的点，看不出「检索」这个动作曾经发生过。
+   * 所以候选池是叙事的一半，不是装饰。
+   *
+   * 时序上：候选点先铺开（0–20% 陆续绽开），接着大多数退场变淡，
+   * 被选中的那几个亮起来（30%）—— 这套节奏写在 styles/ink.css 的
+   * ink-bloom / ink-bloom-keep 两个关键帧里，这里只负责标出哪些是 keep。
+   */
   function demoSpots() {
-    return DEMO_SPOTS.map(([lng, lat]) => ({ id: `demo-${lng}-${lat}`, coords: [lng, lat] }));
+    const out = [];
+
+    // 先铺被筛掉的：它们是这幅画面的背景噪声
+    const routes = window.TRIP_ROUTES || {};
+    parsePairs(routes.candidates).forEach((coords, i) => {
+      out.push({ id: `cand-${i}`, name: '', coords, keep: false });
+    });
+
+    // 再铺行程点。放后面是因为 --i 决定错峰的相位 ——
+    // 「留下的那几个」在叙事上本来就该晚一拍出现
+    demoDays().forEach((day, di) => {
+      day.stops.forEach((stop, si) => {
+        out.push({ id: `demo-${di}-${si}`, name: stop.name, coords: stop.coords, keep: true });
+      });
+    });
+
+    return out;
   }
 
   /* ------------------------------------------------------------------ */
@@ -160,8 +256,10 @@
     const list = state.mode === 'demo' ? demoSpots() : state.spots;
     parts.dots.replaceChildren();
     parts.dotsNodes = list.map((spot, i) => {
-      const demoKeep = state.mode === 'demo' && DEMO_SPOTS[i] && DEMO_SPOTS[i][2] === 1;
-      const dot = el('circle', { '--i': i, r: 0 }, demoKeep ? 'ink__dot is-keep' : 'ink__dot');
+      // 演示模式下只有行程点是「被排进行程的」，检索回来的其余点会退场变淡；
+      // live 模式一律先是候选，由 select 事件决定谁留下
+      const isKeep = state.mode === 'demo' && Boolean(spot.keep);
+      const dot = el('circle', { '--i': i, r: 0 }, isKeep ? 'ink__dot is-keep' : 'ink__dot');
       dot.dataset.id = spot.id;
       if (spot.name) {
         const title = document.createElementNS(NS, 'title');
@@ -172,6 +270,57 @@
       return dot;
     });
     svg.setAttribute('class', `stage__ink ink--${state.mode === 'demo' ? 'demo' : 'live'}`);
+
+    // demo 的路线与印章是固定素材，和点一起重建
+    if (state.mode === 'demo') buildDemoRoute();
+  }
+
+  /**
+   * demo 的路线：把预先挑好的那几个点按顺序连成一条墨线，末端落一枚朱砂印章。
+   *
+   * 【这条线以前不存在，而它是整个演示最要紧的一拍】
+   * styles/ink.css 里 ink-draw 的关键帧写好了（30%–50% 墨线自绘）、
+   * 文件头的时间轴注释里也列着这一拍、印章的 ink-stamp 同样就位 ——
+   * 但 JS 从来没在 demo 模式创建过 .ink__line，state.sealAt 也一直是 null。
+   * 于是循环里只有散落的点，看不到「连成一条路」。
+   *
+   * 点只是「搜到了这些地方」，线才是「排成了行程」——
+   * 少了这一拍，整个演示就停在第一步上。
+   *
+   * 坐标**不在这里投影**：这里只把经纬度记进 state.paths，由 layout() 统一投影。
+   * 窗口尺寸变化、抽屉开合都会让投影变，在这里算出的像素会在 resize 时被污染。
+   */
+  function buildDemoRoute() {
+    parts.lines.replaceChildren();
+    parts.seal.removeAttribute('transform');
+
+    const days = demoDays();
+    if (!days.length) return;
+
+    // 画的是**真实道路几何**，不是点对点的直线 —— 后者一眼就能看出不是路。
+    // 几何来自构建期向高德要来的数据，运行时零请求。
+    state.paths = days.map((day) => day.shape);
+
+    // 印章落在最后一天的最后一个行程点上 —— 那是机场，整趟行程的句号。
+    // 与 live 模式共用同一套定位逻辑（layout() 里按投影后的坐标摆过去）。
+    const lastStops = days[days.length - 1].stops;
+    state.sealAt = lastStops[lastStops.length - 1].coords;
+
+    // 四条线各用当天的主题色。它们每天都是从酒店出发再回酒店，彼此首尾重叠 ——
+    // 用同一个金色会分不清哪条是哪一天，而「四天」恰恰是这份行程的骨架。
+    days.forEach((day, i) => {
+      /* pathLength="1" 把长度归一化，CSS 那条 stroke-dasharray: 1 才对任意长度成立。
+         --i 是错峰的相位，必须给：CSS 的 animation-delay 写成
+         calc(var(--i) * 0.12s)，变量缺失会让整条 calc 失效、动画直接不跑。 */
+      const line = el(
+        'path',
+        { pathLength: 1, '--i': i, style: `stroke:${window.TRIP_CONFIG.dayHue(i)}` },
+        'ink__line'
+      );
+      line.dataset.day = String(i);
+      parts.lines.append(line);
+    });
+    // d 由 layout() 填 —— 那里拿着当前有效的投影器
   }
 
   /* ------------------------------------------------------------------ */
@@ -403,11 +552,6 @@
   window.TripHeroInk = {
     /** 当前这批点的经纬度包围盒；没有点返回 null，调用方保持当前视野 */
     bounds: currentBounds,
-    boundsOfDemo: () => {
-      const lngs = DEMO_SPOTS.map((s) => s[0]);
-      const lats = DEMO_SPOTS.map((s) => s[1]);
-      return { minLng: Math.min(...lngs), maxLng: Math.max(...lngs), minLat: Math.min(...lats), maxLat: Math.max(...lats) };
-    },
     setProjector(fn) {
       project = fn;
       layout();

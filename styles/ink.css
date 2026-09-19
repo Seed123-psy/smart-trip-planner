@@ -21,7 +21,11 @@
   fill: var(--text-lo);
   opacity: 0;
   animation: ink-bloom 15s var(--ease) infinite;
-  animation-delay: calc(var(--i) * 0.07s);
+  /* 0.015s/个。这个系数是跟着候选池规模走的：现在有一百多个点
+     （检索回来的背景 + 行程点），按最初的 0.07s 要 9 秒多才铺完，
+     而整个循环只有 15 秒 —— 点铺完就该收尾了，中间那几拍全被挤掉。
+     改小之后撒开约占 2 秒，留给「退场 → 连线 → 落章」足够。 */
+  animation-delay: calc(var(--i) * 0.015s);
 }
 
 .ink--demo .ink__dot.is-keep {

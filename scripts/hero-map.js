@@ -33,15 +33,20 @@
   const CITY_ZOOM = 11.5;
 
   /**
-   * 把画面里的内容框进可视区。
+   * 把画面里的内容框进指定的屏幕矩形。
    *
-   * 这里原先自己算缩放与中心：按包围盒的米数除以目标像素数推出 zoom，
-   * 再把中心反推回去。那套数学一路在出错 —— 真实道路换上之后镜头不跟，
-   * 跨江绕山的段直接画出屏幕。既然高德自己就有 fitBounds，就用它：
-   * 行程页的 focusStops 也是这么做的，路线从来没出过框。
+   * 【这段改过三次，每次的教训都留着】
+   * 最初是自己按「包围盒米数 ÷ 目标像素数」推 zoom —— 那套数学一路在出错，
+   * 真实道路换上之后镜头不跟，跨江绕山的段直接画出屏幕。
+   * 于是改成 map.setBounds(bounds, immediately, avoid)，把取景整个交给高德。
+   * 那修好了「画得出框」，但**避让不生效**：实测内容仍然只占容器宽度的
+   * 18%–45%，整块挤在左边压着标题 —— 高德的 avoid 更像「尽量」，
+   * bounds 一大它就退回「按容器居中适配」。
    *
-   * avoid 是四周的避让区，用来给文案和底部的阶段条腾地方，
-   * 而不是靠位移把中心挪过去 —— 让高德一次算准，比事后挪更可靠。
+   * 现在是两者的折中：**用 setBounds 拿基准缩放**（可靠，因为它就是高德算的），
+   * 再按目标矩形与适配尺寸的比值做一次等比修正，最后平移中心。
+   * 关键是这里**没有从米数推算**——只用了「缩放每 +1 尺寸翻倍」这一条比例关系，
+   * 所以不会再踩最初那套数学的坑。
    */
   function frameMap(map, box, options) {
     const w = box.clientWidth;
@@ -63,16 +68,55 @@
 
     const narrow = w < 900;
     const sheetOpen = document.body.classList.contains('is-sheet-open');
+    const animate = Boolean(options && options.animate);
 
-    // avoid：[上, 右, 下, 左]
-    //   窄屏   —— 上方留给文案、下方留给阶段条
-    //   宽屏   —— 左侧留给文案（抽屉开着时文案已淡出，就没必要让了）
-    //   底部一律多留一点，因为七阶段管线条压在那儿
-    const avoid = narrow
-      ? [Math.round(h * 0.3), 26, Math.round(h * 0.16), 26]
-      : [36, 36, 74, sheetOpen ? 36 : Math.round(w * 0.42)];
+    /* 目标矩形：内容该画在哪一块。
+       宽屏时左侧一大片留给标题与按钮，底部留给七个阶段的管线，
+       所以内容压到右侧并留出上下呼吸 —— 这就是「大部分点靠右」那条要求。 */
+    const target = narrow
+      ? { x: 20, y: Math.round(h * 0.34), w: w - 40, h: Math.round(h * 0.46) }
+      : {
+          x: sheetOpen ? 40 : Math.round(w * 0.44),
+          y: Math.round(h * 0.1),
+          w: (sheetOpen ? w - 80 : w - Math.round(w * 0.44) - 48),
+          h: Math.round(h * 0.72)
+        };
 
-    map.setBounds(bounds, !(options && options.animate), avoid);
+    // 第一步：按整块容器适配一次，读到基准缩放与内容在该缩放下的像素尺寸
+    map.setBounds(bounds, true);
+    const zoomFit = map.getZoom();
+    const nw = map.lngLatToContainer(new AMap.LngLat(b.minLng, b.maxLat));
+    const se = map.lngLatToContainer(new AMap.LngLat(b.maxLng, b.minLat));
+    const fitW = Math.abs(se.getX() - nw.getX()) || 1;
+    const fitH = Math.abs(se.getY() - nw.getY()) || 1;
+
+    // 第二步：按目标矩形与适配尺寸的比值修正缩放（等比，取更紧的一边）
+    const k = Math.min(target.w / fitW, target.h / fitH);
+    const zoom = Math.max(3, Math.min(18, zoomFit + Math.log2(k)));
+
+    /* 第三步：把内容中心挪到目标矩形的中心。
+       setZoom 用 immediately=true 立即生效 —— 这一步必须是同步的，
+       否则紧接着的 containerToLngLat 读到的还是旧缩放下的映射，
+       平移量会算错，而且错得没有痕迹（画面只是偏了，不报错）。
+
+       补偿方式：目标像素位置（现在是别的经纬度）与内容中心之间的差，
+       原样加回到当前 center 上。不做「每像素多少度」那种换算 ——
+       那正是最初那版出错的根源。 */
+    map.setZoom(zoom, true);
+
+    const mid = new AMap.LngLat((b.minLng + b.maxLng) / 2, (b.minLat + b.maxLat) / 2);
+    const cx = target.x + target.w / 2;
+    const cy = target.y + target.h / 2;
+    const at = map.containerToLngLat(new AMap.Pixel(cx, cy));
+    const center = map.getCenter();
+
+    map.setCenter(
+      [
+        center.getLng() + (mid.getLng() - at.getLng()),
+        center.getLat() + (mid.getLat() - at.getLat())
+      ],
+      animate
+    );
   }
 
   function loadScript(src) {
