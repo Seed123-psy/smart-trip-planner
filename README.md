@@ -139,12 +139,15 @@ scripts/                  浏览器侧（无构建步骤，直接 ES module）
   account.js              个人账号页
   admin.js                管理后台
   runtime-config.js       运行时配置：从 /api/config 取浏览器侧密钥
+  export-pdf.js           导出 PDF：构建打印版面（走浏览器打印，不引库）
 
 styles/                   base(令牌) / form / layout / components / prep / map /
-                          planner / landing / editor / auth / session / account / admin
+                          planner / landing / editor / auth / session / account /
+                          admin / print(打印版面，屏幕上不显示)
 
 tools/                    服务端（Node，CommonJS）
   amap-proxy.js           高德转发逻辑，serve.js 与 api/amap.js 共用
+  static-map.js           静态地图：把某天的路线渲染成 PNG，供导出 PDF 用
   planner.js              DeepSeek 规划：筛选/排程/审校/美食/行前准备 + 高德算路装配
   sse.js                  SSE 帧写入器，serve.js 与 api/plan.js 共用
   generate-routes.js      构建期：地理编码 + 批量算路
@@ -352,8 +355,38 @@ event: error   data: {"message":"..."}    ← 终结帧
 | 点顶栏「当地美食」 | 打开另一个抽屉：按行程动线排的「在哪吃 · 吃什么」。没有美食数据时（内置示例行程）这个入口整颗隐藏 |
 | 点顶栏「编辑行程」 | 进入编辑模式：每个点右侧出现 ↑ ↓ ✕，时间戳变成可改的输入框，当天末尾出现「加个景点」 |
 | `←` `→` 或 `k` `j` | 在总览与各天之间连续切换 |
+| 点顶栏「导出 PDF」 | 生成一份可打印的行程册，在打印对话框里选「另存为 PDF」——见下一节 |
 
 时间轴上的**距离条**按当天最长路段归一化，一眼看出哪段路最远。
+
+### 导出 PDF
+
+![导出的封面](docs/screenshots/08-export-cover.jpg)
+
+点顶栏「导出 PDF」，浏览器打开打印对话框，选「另存为 PDF」即可。
+版面是**封面 + 每天一页（当天地图 + 时间轴）+ 行前准备**：
+
+![导出的某一天](docs/screenshots/09-export-day.jpg)
+
+**没有引任何库。** 生成 .pdf 只有两条路：jsPDF + html2canvas（约 350KB，
+且结果是**图片型** —— 文字不能选中也不能搜索，地图还可能截成空白），
+或者服务端跑一个 Chromium（几百 MB）。浏览器打印是零依赖的那条：
+文字矢量、中文用系统字体直接渲染、分页与页边距交给浏览器 ——
+而那些恰恰是它做得最熟的事。
+
+**地图是服务端渲染的静态图**（`/api/staticmap`）。页面上那张是 canvas，
+打印时多半一片空白；而且它只显示**当前视野**，导出那一刻用户停在总览还是
+某一天都不确定。静态图按当天的几何重画、颜色取当天主题色，与操作无关。
+代价是它带地名标注与高德水印，后者是使用条款要求的。
+
+**打印版面是单独造的一份**，不存在于页面上（`styles/print.css` 让它平时
+`display: none`）。行程页是「一次显示一天」，而 PDF 要一次看全 ——
+与其用打印样式去展开那些被折叠的节点（还得跟交互状态打架），
+不如按数据重建只读版面。时间轴那部分直接复用 `TripTimeline.renderDay`。
+
+> ⚠️ **打印时记得勾选「背景图形」**（打印对话框 → 更多设置）。
+> 时间轴卡片的底色、路线概览的进度条都靠背景色，不勾的话那几处会整片消失，
+> 看起来像排版坏了。
 
 ### 首页
 
