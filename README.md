@@ -9,7 +9,7 @@
 ![Node](https://img.shields.io/badge/Node-%E2%89%A522-339933?logo=nodedotjs&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![Build](https://img.shields.io/badge/build-none-brightgreen)
-![License](https://img.shields.io/badge/license-private-lightgrey)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 
 </div>
 
@@ -26,6 +26,7 @@
 - [数据库](#数据库)
 - [部署](#部署)
 - [开发与维护](#开发与维护)
+- [License](#license)
 
 ## 界面预览
 
@@ -784,6 +785,15 @@ curl "https://你的域名/api/amap?p=/v3/weather/weatherInfo&city=420100&extens
 
 > `data/app.db` 是迁移前的 SQLite 源库，已于 2026-09-19 停用。它现在有两个身份：
 > `database.sql` 的导出源、以及迁移的回退物 —— 所以**别删**，也仍然不入库。
+
+## License
+
+[Apache License 2.0](LICENSE) —— 可自由使用、修改、分发，包括商用，
+需保留版权声明与许可副本。
+
+> 项目调用的第三方服务（高德地图、DeepSeek）各自受其自身条款约束，
+> 不在本许可范围内。`config.js` 里的高德 WebJS key 是作者自己的，
+> 你要部署的话请换成自己申请的。
 
 ---
 
