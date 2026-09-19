@@ -1,8 +1,8 @@
 {
-  "name": "wuhan-trip",
+  "name": "smart-trip-planner",
   "version": "0.0.0",
   "private": true,
-  "description": "武汉行程攻略：静态站点 + 规划服务",
+  "description": "六个 Agent 接力的 AI 行程规划器：高德实时检索 + 多 Agent 排程 + 真实道路算路",
   "engines": {
     "node": ">=22"
   },
