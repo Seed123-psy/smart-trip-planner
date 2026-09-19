@@ -1,0 +1,243 @@
+/* ============================================================
+   打印版面：导出 PDF 用的那一份
+
+   这份样式和其他所有样式表的用法都不一样 —— 它只在打印时生效。
+
+   版面由 scripts/export-pdf.js 在导出那一刻构建，挂在 <body> 末尾，
+   屏幕上**完全不显示**（见下面第一条 .sheet { display: none }）。
+   点「导出 PDF」时才现身，然后浏览器打开打印对话框，用户选「另存为 PDF」。
+
+   分页交给浏览器：`break-before: page` 让每一天从新的一页开始。
+   这件事自己算不来 —— 字号、纸张、边距都会影响一行放得下多少内容，
+   而浏览器在这些事上比我们熟。
+
+   【时间轴那一块没在这里重写样式】
+   它复用的是行程页 TripTimeline.renderDay 的产物（.timeline / .stop / .leg
+   那一套 class），所以外观与页面上一致。这里只做几件打印特有的事：
+   去掉交互态、收掉阴影、把颜色钉死（打印时背景色默认不输出）。
+   ============================================================ */
+
+.sheet {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 13mm 16mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* 页面上的一切都让位，只留打印版面。
+     sheet 是 <body> 的**直接子元素**（export-pdf.js 挂在最后），
+     所以这条选择器足够精确，不会误伤 sheet 内部的东西。 */
+  body > *:not(#print-sheet) {
+    display: none !important;
+  }
+
+  #print-sheet {
+    display: block;
+    color: var(--text-hi);
+    font-family: var(--font-ui);
+    font-size: 10.5pt;
+    line-height: 1.6;
+  }
+
+  /* ---------- 封面 ---------- */
+
+  .sheet__cover {
+    break-after: page;
+    padding-top: 46mm;
+    text-align: center;
+  }
+
+  .sheet__eyebrow {
+    margin: 0;
+    color: var(--text-lo);
+    font-size: 9pt;
+    letter-spacing: 0.34em;
+  }
+
+  .sheet__city {
+    margin: 6mm 0 3mm;
+    font-family: var(--font-display);
+    font-size: 34pt;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+
+  .sheet__dates {
+    margin: 0;
+    color: var(--text-mid);
+    font-family: var(--font-num);
+    font-size: 13pt;
+    letter-spacing: 0.1em;
+  }
+
+  .sheet__stats {
+    display: flex;
+    justify-content: center;
+    gap: 9mm;
+    margin: 12mm 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--text-mid);
+  }
+
+  .sheet__stats b {
+    display: block;
+    color: var(--gold-ink);
+    font-family: var(--font-num);
+    font-size: 17pt;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  /* ---------- 每天 ---------- */
+
+  .sheet__day {
+    break-before: page;
+  }
+
+  .sheet__dayhead {
+    display: flex;
+    align-items: baseline;
+    gap: 3mm;
+    padding-bottom: 2.5mm;
+    border-bottom: 1.5pt solid var(--day-hue, var(--gold-line));
+  }
+
+  .sheet__daynum {
+    flex: none;
+    color: var(--day-hue, var(--gold-ink));
+    font-family: var(--font-num);
+    font-size: 12pt;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
+
+  .sheet__daytitle h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 17pt;
+    font-weight: 700;
+  }
+
+  .sheet__daymeta {
+    margin: 1mm 0 0;
+    color: var(--text-lo);
+    font-size: 9pt;
+  }
+
+  .sheet__daysum {
+    margin: 3mm 0 4mm;
+    color: var(--text-mid);
+    font-size: 10pt;
+  }
+
+  /* ---------- 路线图 ---------- */
+
+  .sheet__map {
+    margin: 0 0 5mm;
+  }
+
+  .sheet__map img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 0.5pt solid var(--paper-3);
+    border-radius: 1.5mm;
+  }
+
+  /* ---------- 行前准备 ---------- */
+
+  .sheet__prep {
+    break-before: page;
+  }
+
+  .sheet__prep > h2 {
+    margin: 0 0 5mm;
+    padding-bottom: 2.5mm;
+    border-bottom: 1.5pt solid var(--gold-line);
+    font-family: var(--font-display);
+    font-size: 17pt;
+  }
+
+  .sheet__prepgrid {
+    column-count: 2;
+    column-gap: 8mm;
+  }
+
+  .sheet__prepblock {
+    /* 一块内容别被切成两页 */
+    break-inside: avoid;
+    margin-bottom: 6mm;
+  }
+
+  .sheet__prepblock h3 {
+    margin: 0 0 2mm;
+    color: var(--gold-ink);
+    font-size: 11pt;
+    font-weight: 600;
+  }
+
+  .sheet__group {
+    margin: 2mm 0 1mm;
+    color: var(--text-mid);
+    font-size: 9pt;
+    font-weight: 600;
+  }
+
+  .sheet__list {
+    margin: 0;
+    padding-left: 4.5mm;
+  }
+
+  .sheet__list li {
+    margin-bottom: 1.5mm;
+    break-inside: avoid;
+  }
+
+  .sheet__note {
+    display: block;
+    color: var(--text-lo);
+    font-size: 9pt;
+  }
+
+  /* ---------- 把页面上的交互态收干净 ---------- */
+
+  /* 时间轴复用了行程页的 DOM，那里有些为屏幕准备的东西要按掉 */
+  #print-sheet .timeline {
+    gap: 0;
+  }
+
+  #print-sheet .stop,
+  #print-sheet .leg,
+  #print-sheet .daysum__card {
+    break-inside: avoid;
+    box-shadow: none !important;
+    /* 屏幕上这些卡片有 hover 抬升与描边强调，纸上都没有意义 */
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* 打印默认不输出背景色，统计条、徽标那类会整片消失 */
+  #print-sheet * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 编辑模式的操作按钮不该出现在纸上 —— 正常情况下进不来（版面是只读重建的），
+     但用户可能先开了编辑模式再导出，多一道保险 */
+  #print-sheet [class*='edit-'],
+  #print-sheet [class*='__edit'],
+  #print-sheet button.edit {
+    display: none !important;
+  }
+}

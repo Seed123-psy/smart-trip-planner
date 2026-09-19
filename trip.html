@@ -29,6 +29,8 @@
   <link rel="stylesheet" href="styles/editor.css" />
   <link rel="stylesheet" href="styles/planner.css" />
   <link rel="stylesheet" href="styles/session.css" />
+  <!-- 打印版面。屏幕上不显示任何东西，只在导出 PDF 时现身 -->
+  <link rel="stylesheet" href="styles/print.css" />
 
   <!-- 从首页过来才铺纸面（见 base.css 的 .pageveil）。
        必须放在 head 里同步执行：等到 body 末尾的脚本跑，首屏可能已经画出来了，
@@ -117,6 +119,20 @@
             <path d="m7 8 5-5 5 5" />
           </svg>
           <span>分享</span>
+        </button>
+
+        <button
+          class="export-open"
+          id="export-open"
+          type="button"
+          title="生成一份可打印的行程册：在打印对话框里选「另存为 PDF」"
+        >
+          <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+          </svg>
+          <span>导出 PDF</span>
         </button>
 
         <button
@@ -395,5 +411,7 @@
   <script src="scripts/planner.js"></script>
   <!-- 账号入口。放最后：它要读 /api/me，但页面渲染不等它 -->
   <script src="scripts/session-bar.js"></script>
+  <!-- 放最后：它要用 TripTimeline 渲染打印版面 -->
+  <script src="scripts/export-pdf.js"></script>
 </body>
 </html>

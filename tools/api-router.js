@@ -59,6 +59,7 @@ const {
 } = require('./auth');
 const userAdmin = require('./user-admin');
 const { setUserKey, userKeyHint } = require('./user-keys');
+const staticMap = require('./static-map');
 const quota = require('./quota');
 const trips = require('./trips');
 const audit = require('./audit');
@@ -664,6 +665,45 @@ on('GET', '/api/share/:token', async ({ res, params }) => {
   const shared = await trips.getByShare(params.token);
   if (!shared) throw new HttpError(404, '这个分享链接不存在或已被撤销', { expose: true });
   sendJson(res, 200, { plan: shared.plan, readOnly: true, city: shared.city });
+});
+
+/* ---------- 导出 PDF 用的静态地图 ---------- */
+
+/**
+ * 某一天的路线，渲染成一张 PNG。
+ *
+ * 不需要登录：行程本身就有 capability URL 那套（拿到 id 就能看），
+ * 这张图不过是同一份数据的另一种画法，多一道鉴权挡不住什么，
+ * 却会让「未登录时导出自己的行程」这条正常路径变得别扭。
+ *
+ * 颜色由前端传（当天主题色），不在服务端硬编码 —— 调色板住在
+ * config.js 的 DAY_HUE 里，服务端没有理由再抄一份。
+ */
+on('GET', '/api/staticmap', async ({ res, query }) => {
+  const day = Number(query.day);
+  if (!Number.isInteger(day) || day < 0 || day > 30) {
+    throw badRequest('day 需要是 0—30 之间的整数');
+  }
+
+  // 高德静态地图的尺寸上限是 1024×1024
+  const w = Math.min(Math.max(Number(query.w) || 750, 200), 1024);
+  const h = Math.min(Math.max(Number(query.h) || 420, 150), 1024);
+
+  const color = /^0x[0-9A-Fa-f]{6}$/.test(String(query.color || ''))
+    ? String(query.color)
+    : '0x333333';
+
+  const { buffer, contentType } = await staticMap.dayMap(day, { w, h }, color);
+
+  /* 不走 sendJson：这是二进制。也刻意不带缓存头 ——
+     同一张图内容确实不变，但导出是低频操作，缓存住反而会在
+     改了行程数据之后仍然给出旧图，而那种错很难被察觉。 */
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Content-Length': buffer.length,
+    'Cache-Control': 'no-store'
+  });
+  res.end(buffer);
 });
 
 /* 阶段 3 到此为止。后面的接口一律由对应阶段连同它的数据层一起加，
