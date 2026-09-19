@@ -356,6 +356,11 @@
       if (!window.TripPlanStore.save(result.plan)) {
         throw new Error('这份行程没能存进浏览器，无法带到下一页。请检查是否处于隐私模式。');
       }
+      // 服务端在返回结果时把落库的 id 与**认领凭证**一起挂了回来。记下来 ——
+      // 这个人之后若登录，客户端凭它们去认领（服务端并不知道
+      // 「哪些匿名行程是同一个人规划的」）。未登录时记了也无妨。
+      // 凭证必须一起存：只凭 id 认领的话，拿到链接的人就能把行程夺走。
+      window.TripPlanStore.saveId(result.plan.tripId, result.plan.claimToken);
       setStatus(`已生成 ${result.plan.days.length} 天行程，正在打开…`);
 
       // 先收成一张纸再走：首页是暖化的淡墨纸、行程页是中性底图，

@@ -26,6 +26,7 @@
     mapStatus: document.getElementById('map-status'),
     mapNote: document.getElementById('map-note'),
     mapError: document.getElementById('map-error'),
+    notice: document.getElementById('notice'),
     wxLive: document.getElementById('wx-live'),
     wxDay: document.getElementById('wx-day')
   };
@@ -35,7 +36,11 @@
 
   const state = {
     dayIndex: VIEW_ALL,
-    mapReady: false
+    mapReady: false,
+    /** 这次显示的是不是只读的分享视图（?share=）。只读时编辑与规划入口都藏掉 */
+    readOnly: false,
+    /** 这份行程在服务端的 id。没有就说明它还没落库（比如 sessionStorage 交接来的），分享不了 */
+    tripId: null
   };
 
   /**
@@ -488,6 +493,32 @@
     if (message) dom.mapError.querySelector('p').textContent = message;
   }
 
+  let noticeTimer = 0;
+
+  /**
+   * 顶部临时提示。
+   *
+   * 与 showMapError 分开，而不是复用它：那个面板的标题写死了
+   * 「地图暂时没能加载出来」，拿它显示「分享链接已复制」会变成
+   * 一句莫名其妙的话 —— 而用户看到的正是这句标题。
+   */
+  function showNotice(text, tone) {
+    if (!dom.notice) return;
+
+    dom.notice.textContent = text;
+    dom.notice.dataset.tone = tone || 'ok';
+    dom.notice.hidden = false;
+
+    clearTimeout(noticeTimer);
+    // 成功提示自动收；失败留着不自动消失 —— 尤其分享失败时，
+    // 链接是要让人抄下来的
+    if (tone !== 'error') {
+      noticeTimer = setTimeout(() => {
+        dom.notice.hidden = true;
+      }, 6000);
+    }
+  }
+
   /* ------------------------------------------------------------------ */
   /* 侧栏折叠                                                            */
   /* ------------------------------------------------------------------ */
@@ -681,41 +712,172 @@
   /* 启动                                                               */
   /* ------------------------------------------------------------------ */
 
-  async function boot() {
-    // 首页交接过来的行程必须在任何渲染之前落进全局数据：
-    // renderBand / renderDaybar 直接读 CFG.TRIP 与 ITINERARY.days，
-    // TripMap.init 用 CFG.MAP 起手，weather/route 也都是调用时才读配置。
-    // 放在这里改掉，首屏就是新行程，不会先画一遍武汉再被覆盖。
+  /**
+   * 取一份存在服务端的行程。**任何失败都返回 null**，由调用方回落到内置行程 ——
+   * 一份取不到的行程不该让整页打不开。
+   */
+  async function fetchPlan(url) {
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) return null;
+      const body = await res.json();
+      return body && body.plan ? body.plan : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 决定这一页显示哪份行程。优先级：
+   *
+   *   ?share=          只读的分享链接
+   *   ?trip=           存在服务端的行程
+   *   ?sample=1        内置示例
+   *   sessionStorage   首页刚规划好的交接
+   *   内置示例
+   *
+   * 【?sample=1 必须排在 sessionStorage 之前】
+   * 首页那个「先看看示例」的意图是「给我看内置的武汉行程」。若让交接数据
+   * 抢先，它会显示成上一次规划出来的城市 —— 与按钮上写的完全不是一回事，
+   * 而用户根本不会想到是「顺序」的问题。
+   *
+   * @returns {Promise<{plan: object|null, readOnly: boolean, notice: string|null}>}
+   *   plan 为 null 表示用内置行程
+   */
+  async function loadItinerary() {
+    const params = new URLSearchParams(location.search);
+
+    const shareToken = params.get('share');
+    if (shareToken) {
+      const shared = await fetchPlan('/api/share/' + encodeURIComponent(shareToken));
+      return shared
+        ? { plan: shared, readOnly: true, notice: null }
+        : { plan: null, readOnly: true, notice: '这个分享链接不存在，或者已经被撤销了。' };
+    }
+
+    const tripId = params.get('trip');
+    if (tripId) {
+      const mine = await fetchPlan('/api/trips/' + encodeURIComponent(tripId));
+      return mine
+        ? { plan: mine, readOnly: false, notice: null }
+        : { plan: null, readOnly: false, notice: '找不到这份行程，或者你没有权限查看。' };
+    }
+
+    if (params.get('sample') === '1') {
+      /* 这里**不再清掉**交接数据。
+         原先清是因为「不清的话，示例会显示成上次规划出来的城市」——
+         但那个问题在更上面就被解决了：这个分支直接返回内置行程，
+         根本不读 sessionStorage。
+         而清掉的代价是：看一眼示例（顶栏常驻入口）就把刚规划好、
+         还没落盘的那份交接数据销毁了，后退或再打开行程页就只剩内置的武汉。
+
+         不在这里清还有个好处：清空变成「下一次规划覆盖」这一个动作，
+         语义比「看示例 = 丢弃」单纯得多。 */
+      return { plan: null, readOnly: false, notice: null };
+    }
+
     if (window.TripPlanStore) {
-      // 首页的「先看看示例」带 ?sample=1 进来：先把上次的交接数据清掉，
-      // 否则「示例」会显示成上一次规划出来的城市，而不是内置的武汉行程
-      if (new URLSearchParams(location.search).get('sample') === '1') {
-        window.TripPlanStore.clear();
-      }
       const pending = window.TripPlanStore.read();
-      if (pending) {
+      if (pending) return { plan: pending, readOnly: false, notice: null };
+    }
+
+    return { plan: null, readOnly: false, notice: null };
+  }
+
+  /**
+   * 分享按钮。
+   *
+   * 只对「已经在服务端有一份」的行程有意义 —— 从 sessionStorage 交接来的那份
+   * 可能还没落库（用户没登录时服务端不知道是谁的，但 id 依然存在，
+   * 见 tools/trips.js 的说明）。没有 tripId 或处于只读视图时按钮直接藏起来，
+   * 而不是让人点了才看到报错。
+   */
+  function initShare() {
+    const btn = document.getElementById('share-open');
+    if (!btn) return;
+
+    if (!state.tripId || state.readOnly) {
+      btn.hidden = true;
+      return;
+    }
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/trips/${encodeURIComponent(state.tripId)}/share`, { method: 'POST' });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((body && body.error) || `请求失败（${res.status}）`);
+
+        const url = `${location.origin}${location.pathname}?share=${body.token}`;
+        let copied = false;
         try {
-          applyPlanData(pending);
-          console.log(`[行程交接] 已接上首页规划的 ${pending.days.length} 天行程：${CFG.TRIP.city}`);
-        } catch (error) {
-          console.warn('[行程交接] 应用失败，回退到内置行程：', error && error.message);
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        } catch {
+          // 非 https 下剪贴板不可用。把链接显示出来让人手抄，别只是失败
         }
+
+        showNotice(copied ? '分享链接已复制，发给你同行的人就能打开。' : `分享链接：${url}`,
+          copied ? 'ok' : 'error');
+      } catch (error) {
+        showNotice('生成分享链接失败：' + error.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async function boot() {
+    // 取数在**任何渲染之前**完成。renderBand / renderDaybar 直接读
+    // CFG.TRIP 与 ITINERARY.days，先画一遍武汉再换成用户的行程会看到明显的一闪 ——
+    // 而这三种来源里有两种要发请求，所以这一步是异步的。
+    // 加载期间纸面（.pageveil）不揭开，见 trip.html 里那段内联脚本。
+    const loaded = await loadItinerary();
+    state.readOnly = loaded.readOnly;
+
+    // 服务端落库时挂回来的 id —— 分享按钮靠它。要在 applyPlanData 之前取，
+    // 因为那一步会把 plan 的内容灌进全局，之后这份对象就不该再当数据源用了
+    if (loaded.plan && typeof loaded.plan.tripId === 'string') state.tripId = loaded.plan.tripId;
+
+    if (loaded.plan) {
+      try {
+        applyPlanData(loaded.plan);
+        console.log(`[行程] 已载入 ${loaded.plan.days.length} 天行程：${CFG.TRIP.city}`);
+      } catch (error) {
+        console.warn('[行程] 应用失败，回退到内置行程：', error && error.message);
       }
     }
+
+    if (state.readOnly) document.body.classList.add('is-readonly');
 
     renderBand();
     renderDaybar();
     // 抽屉壳统一初始化；行前准备与当地美食是在各自文件里注册进来的视图
     window.TripDrawer.init();
-    window.TripEditor.init();
+    // 只读视图不初始化编辑器：分享是给人看的，不是给人改的。
+    // 入口本身由 editor.css 的 body.is-readonly 藏起来
+    if (!state.readOnly) window.TripEditor.init();
+    initShare();
     initRail();
 
     // 天气不参与首屏：先让行程和地图出来，取到数据再补上
     refreshWeather();
 
+    // 左栏先画一次，**不等任何网络**。
+    // selectDay / selectOverview 在 mapReady 为假时，会把侧栏内容写完就
+    // 提前返回，所以这一步既不依赖地图，也不依赖运行时配置。
+    // 顺序很重要：下面的运行时配置最多要等 3 秒（超时才回落静态值），
+    // 若把左栏渲染放在它之后，「配置服务挂了」就会表现为「行程页空 3 秒」——
+    // 那正是运行时配置本来要避免的那种连带故障。
+    await selectDay(VIEW_ALL);
+
     try {
+      // TripMap.init 一进去就读 CFG.AMAP，服务端的覆盖必须在那之前落定。
+      if (window.TripRuntimeConfig) await window.TripRuntimeConfig.ready;
+
       await window.TripMap.init();
       state.mapReady = true;
+      // 地图就位后再画一次，把总览里与地图相关的那部分补上
       await selectDay(VIEW_ALL);
     } catch (err) {
       // 地图挂了也要能看行程：先把时间轴渲染出来，再提示地图问题
@@ -726,6 +888,13 @@
           `且高德控制台已为该 Key 绑定「Web端(JS API)」平台。`
       );
     }
+
+    // 分享链接失效之类的提示放最后说，并且优先于地图错误 ——
+    // 用户更需要知道的是「这份行程为什么不是你期望的那份」，
+    // 而不是「地图为什么没出来」
+    // 分享链接失效之类的提示。用 error 语气（不自动消失）：
+    // 它解释的是「你看到的为什么不是你期望的那份行程」，值得让人看清
+    if (loaded.notice) showNotice(loaded.notice, 'error');
 
     // 纸面收场：等首屏（标记与视野）就位再揭开。
     // 路线是随后自己补上来的 —— 那点「线慢慢长出来」的延迟，
@@ -770,5 +939,19 @@
     /** 编辑模式用：重算路段那几秒要有个加载态，否则像卡住了 */
     setBusy: showStatus
   };
-  boot();
+  /* boot 必须兜底。
+
+     boot 里任何一步意外抛错，纸面（.pageveil）就永远不会揭开 ——
+     页面停在纯纸色上，既没有内容也没有提示，看起来像站点整个挂了。
+     之前它是个裸调用，而 boot 里除了最后那段地图的 try/catch，
+     中间十几步都在裸奔。 */
+  boot().catch((error) => {
+    console.error('[行程] 启动失败：', error);
+    document.documentElement.classList.add('is-entered');
+    try {
+      showNotice('页面加载时出了点问题：' + (error && error.message ? error.message : error), 'error');
+    } catch {
+      /* 连提示都发不出来就只能算了，但纸面已经揭开，至少能看到页面 */
+    }
+  });
 })();

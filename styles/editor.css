@@ -6,9 +6,14 @@
    才会被渲染出来的节点上，不需要额外的全局开关类。
    ============================================================ */
 
-/* ---------------- 顶栏入口 ---------------- */
+/* ---------------- 顶栏入口 ----------------
 
-.edit-open {
+   这一组是「信息带上的动作按钮」的通用外观。edit-open 是最早的那个，
+   分享按钮（.share-open，阶段 6）沿用它 —— 并列选择器而不是复制一份规则，
+   否则改一次外观要记得改两处，而漏掉的那处只会在某个页面上看起来「有点不一样」。 */
+
+.edit-open,
+.share-open {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -23,13 +28,15 @@
     background 0.18s var(--ease);
 }
 
-.edit-open:hover {
+.edit-open:hover,
+.share-open:hover {
   color: var(--gold-ink);
   border-color: var(--gold-line);
   background: var(--gold-soft);
 }
 
-.edit-open svg {
+.edit-open svg,
+.share-open svg {
   opacity: 0.85;
 }
 
@@ -39,6 +46,17 @@
   color: var(--paper-0);
   border-color: var(--gold-ink);
   background: var(--gold-ink);
+}
+
+/* ---------------- 只读（分享链接进来） ----------------
+
+   分享是给人看的，不是给人改的：编辑与重新规划这两个入口直接藏掉。
+   服务端那边这条路径也确实不返回任何可写的能力（见 tools/api-router.js
+   的 /api/share/:token），这里只是别让人对着按不动的按钮发呆。 */
+body.is-readonly .edit-open,
+body.is-readonly .share-open,
+body.is-readonly .planner-open {
+  display: none;
 }
 
 /* ---------------- 卡片上的操作条 ---------------- */

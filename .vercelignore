@@ -1,8 +1,15 @@
 # 含明文密钥，绝不能上传 —— 线上改用 Vercel 环境变量 AMAP_WEB_SERVICE_KEY
 config.local.js
 
+# 依赖目录不上传：Vercel 见到 package.json 会自己装。
+# 传上去只是白白拖慢每次部署，而且会传一堆与线上那条链路无关的包
+node_modules/
+
 # 构建期缓存，体积大且可随时重建
 tools/.cache/
+
+# 本地数据库：含用户名、口令散列与密钥密文，绝不上传
+data/*.db*
 
 # 本机会话与编辑器配置
 .claude/
@@ -10,3 +17,8 @@ tools/.cache/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 会话与工具产物，与站点运行无关（.gitignore 已挡，这里补上 ——
+# 两份名单不一致时，漏的那份就是上传的那份）
+.playwright-mcp/
+.spec-workflow/

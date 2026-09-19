@@ -8,6 +8,9 @@
 'use strict';
 
 const path = require('path');
+const { resolveDeepseekKey, resolveAmapServiceKey } = require('./keys');
+const { redact } = require('./http');
+
 const ROOT = path.resolve(__dirname, '..');
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/chat/completions';
 const AMAP_BASE = 'https://restapi.amap.com';
@@ -17,6 +20,22 @@ const AMAP_TIMEOUT_MS = 12000;
 const ROUTE_TIMEOUT_MS = 8000;
 /** 算路全部失败时的兜底均速（km/h），结果会标记 estimated 供前端提示 */
 const FALLBACK_SPEED = { driving: 25, transit: 22, walking: 4.5 };
+
+/**
+ * 带脱敏的告警出口。
+ *
+ * planner 会把上游（DeepSeek / 高德）的原始错误带进来，而 DeepSeek 认证失败
+ * 那一句是「Authentication Fails, Your api key: ****a765 is invalid」——
+ * 末尾带着密钥后四位。HTTP 出口早就在过 redact()，但这些内部告警没有，
+ * 于是同一份密钥片段从日志这边漏了出去。
+ *
+ * 与其在每个 console.warn 上记得加一次，不如让这个文件里只有这一个出口。
+ */
+function logWarn(...args) {
+  // 这里必须是 console.warn。用脚本批量替换 console.warn 时，
+  // 这一行也被换成了 logWarn，于是它自己调自己 —— 一栈到底。
+  console.warn(...args.map((a) => (typeof a === 'string' ? redact(a) : a)));
+}
 
 /**
  * 表单可选项。key 由前端提交，label 直接进提示词 ——
@@ -104,13 +123,31 @@ function loadLocalConfig() {
   }
 }
 
-function plannerConfig() {
+/**
+ * 本次规划要用的配置。
+ *
+ * overrides 是路由层决定的、与「谁在用」有关的覆盖项 —— 目前只有 deepseekKey：
+ * 用户配了自己的就用他的，没配才用全局的。
+ *
+ * 【为什么「该不该回落」不在这里判断】
+ * 那需要知道账号体系（谁登录了、他的密钥解不解得开），而 planner 的职责是
+ * 「给定输入和密钥，产出行程」。让它去读会话，就再也无法单独测试或复用。
+ * 所以这里只负责用给它的值，一切判断留在路由层。
+ */
+function plannerConfig(overrides) {
   const local = loadLocalConfig();
+  const opt = overrides || {};
+
   return {
-    key: process.env.DEEPSEEK_API_KEY || local.deepseekApiKey || '',
+    // 两把密钥走统一的解析层：环境变量 > 数据库 > config.local.js。
+    // 这样管理员在后台换 key 不用重启，也不用去动服务器上的文件。
+    // 每次调用现解析（会读一次库）—— 这个函数每次规划才调几次，不是每个请求都调。
+    key: String(opt.deepseekKey || '').trim() || resolveDeepseekKey().value || '',
+    amapKey: resolveAmapServiceKey().value || '',
+
+    // 下面两个是模型名，不是密钥，没必要进数据库
     model: process.env.DEEPSEEK_MODEL || local.deepseekModel || 'deepseek-flash',
-    fallbackModel: process.env.DEEPSEEK_FALLBACK_MODEL || 'deepseek-chat',
-    amapKey: process.env.AMAP_WEB_SERVICE_KEY || local.amapWebServiceKey || ''
+    fallbackModel: process.env.DEEPSEEK_FALLBACK_MODEL || local.deepseekChatModel || 'deepseek-chat'
   };
 }
 
@@ -260,7 +297,7 @@ async function resolveCityMeta(city, key) {
       coords: point.length === 2 && point.every(Number.isFinite) ? point : null
     };
   } catch (error) {
-    console.warn('[规划服务] 城市编码解析失败，前端将隐藏天气、公交按城市名算路：', error.message);
+    logWarn('[规划服务] 城市编码解析失败，前端将隐藏天气、公交按城市名算路：', error.message);
     return { adcode: '', citycode: '', coords: null };
   }
 }
@@ -288,7 +325,7 @@ async function discoverCatalog(request, config) {
   const jobs = searchKeywords(request).map((keyword) =>
     runWithRateRetry(searchLimiter, () => searchAmap(keyword, request.city, config.amapKey), `检索「${keyword}」`)
       .catch((error) => {
-        console.warn(`[规划服务] 高德搜索「${keyword}」失败：`, error.message);
+        logWarn(`[规划服务] 高德搜索「${keyword}」失败：`, error.message);
         return [];
       })
   );
@@ -457,7 +494,7 @@ function stripFabricatedPhone(text) {
   const candidates = value.match(/\d[\d\s-]{6,}\d/g) || [];
   const bad = candidates.filter((raw) => !ALLOWED_PHONES.has(raw.replace(/[\s-]/g, '')));
   if (bad.length) {
-    console.warn('[规划服务] 行前准备里出现了疑似编造的电话号码，已替换：', bad[0]);
+    logWarn('[规划服务] 行前准备里出现了疑似编造的电话号码，已替换：', bad[0]);
     return '出发前查官方渠道';
   }
   return value;
@@ -782,7 +819,7 @@ async function runWithRateRetry(limiter, task, label, skipIf) {
     } catch (error) {
       const retriable = /CUQPS|LIMIT|QUOTA|ENGINE_RESPONSE_DATA_ERROR/i.test(error.message);
       if (attempt >= RETRY_DELAYS_MS.length || !retriable) throw error;
-      console.warn(`[规划服务] ${label} 被限流（${error.message}），${RETRY_DELAYS_MS[attempt]}ms 后第 ${attempt + 2} 次尝试`);
+      logWarn(`[规划服务] ${label} 被限流（${error.message}），${RETRY_DELAYS_MS[attempt]}ms 后第 ${attempt + 2} 次尝试`);
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
     }
   }
@@ -895,7 +932,7 @@ async function legMetrics(from, to, mode, ctx) {
     ctx.cache.set(cacheKey, metrics);
     return metrics;
   } catch (error) {
-    console.warn(`[规划服务] ${mode} 算路失败，该段退回直线估算：`, error.message);
+    logWarn(`[规划服务] ${mode} 算路失败，该段退回直线估算：`, error.message);
     return estimateLeg(from, to, mode);
   }
 }
@@ -1069,18 +1106,20 @@ function addDays(date, days) {
  * @param {Function} [onStage] 阶段回调，收 { stage, status, ms, detail? }。
  *        上报失败绝不能影响规划本身，所以这里整条包了 try。
  */
-async function plan(input, onStage) {
+async function plan(input, onStage, options) {
   const emit = (event) => {
     if (typeof onStage !== 'function') return;
     try {
       onStage(event);
     } catch (error) {
-      console.warn('[规划服务] 阶段上报失败（不影响规划）：', error && error.message);
+      logWarn('[规划服务] 阶段上报失败（不影响规划）：', error && error.message);
     }
   };
 
   const request = normalizeRequest(input);
-  const config = plannerConfig();
+  const config = plannerConfig(options);
+  // 走到这里还取不到 key，只可能是全局那份也没配 ——
+  // 「用户自己的 key 解不开」那种情况由路由层提前拦住，不会进到这个函数
   if (!config.key) throw new Error('服务端未配置 DeepSeek API Key');
 
   const deadline = Date.now() + PLAN_BUDGET_MS;
@@ -1158,7 +1197,7 @@ async function plan(input, onStage) {
       }, config));
     } catch (error) {
       // 审校失败不该让整单失败：草案本身是可用的
-      console.warn('[规划服务] 审校 Agent 失败，使用排程结果：', error.message);
+      logWarn('[规划服务] 审校 Agent 失败，使用排程结果：', error.message);
     }
   } else {
     // 报 skipped 而不是假装没这个阶段：前端要能区分「审校过了」和「时间不够跳过了」
@@ -1196,7 +1235,7 @@ async function plan(input, onStage) {
       );
       result.food = sanitizeFood(raw);
     } catch (error) {
-      console.warn('[规划服务] 美食 Agent 失败，这次不带当地美食推荐：', error.message);
+      logWarn('[规划服务] 美食 Agent 失败，这次不带当地美食推荐：', error.message);
       emit({ stage: 'food', status: 'skipped', message: `美食推荐失败：${error.message}` });
     }
   };
@@ -1218,7 +1257,7 @@ async function plan(input, onStage) {
       );
       result.prep = sanitizePrep(raw, result, request);
     } catch (error) {
-      console.warn('[规划服务] 行前准备 Agent 失败，这次不带定制清单：', error.message);
+      logWarn('[规划服务] 行前准备 Agent 失败，这次不带定制清单：', error.message);
       emit({ stage: 'prep', status: 'skipped', message: `行前准备失败：${error.message}` });
     }
   };

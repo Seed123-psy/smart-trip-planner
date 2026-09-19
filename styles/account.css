@@ -1,0 +1,77 @@
+/* ============================================================
+   账号页
+
+   复用 styles/auth.css 的卡片与字段样式（同一个 auth__ 前缀），
+   这里只补这一页特有的几条。
+   ============================================================ */
+
+.auth__card--wide {
+  width: min(520px, 100%);
+}
+
+/* 账号信息：标签 + 值，右侧不参与布局 */
+.auth__facts {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.auth__facts li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+.auth__facts li:last-child {
+  border-bottom: 0;
+}
+
+.auth__facts dt {
+  flex: 0 0 88px;
+  color: var(--text-lo);
+  font-size: 12px;
+}
+
+.auth__facts dd {
+  margin: 0;
+  color: var(--text-hi);
+}
+
+.auth__section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+}
+
+.auth__section h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-hi);
+}
+
+.auth__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.auth__actions .auth__submit {
+  margin-top: 0;
+}
+
+/* 次要动作（清除、退出）：描边而不是实心，避免与主按钮抢注意力 */
+.auth__submit--ghost {
+  background: var(--paper-0);
+  color: var(--text-mid);
+  border: 1px solid var(--rule-strong);
+}
+
+.auth__submit--ghost:hover:not(:disabled) {
+  background: var(--paper-1);
+  color: var(--cinnabar);
+  border-color: rgba(168, 56, 42, 0.35);
+}

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>账号 · 行程手账</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#faf8f4" />
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b8801f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/><circle cx='12' cy='10' r='3'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/auth.css" />
+  <link rel="stylesheet" href="styles/account.css" />
+</head>
+
+<body class="auth">
+  <main class="auth__card auth__card--wide">
+    <h1 class="auth__title">账号</h1>
+    <p class="auth__subtitle">这里可以配置你自己的模型密钥。配了之后，规划消耗的是你自己的额度。</p>
+
+    <ul class="auth__facts" id="facts">
+      <li><dt>用户名</dt><dd id="fact-name">…</dd></li>
+      <li><dt>角色</dt><dd id="fact-role">…</dd></li>
+    </ul>
+
+    <section class="auth__section">
+      <h2>DeepSeek 密钥</h2>
+      <p class="auth__hint" id="key-hint" style="margin-bottom: 10px">载入中…</p>
+
+      <label class="auth__field">
+        <span class="auth__label">密钥</span>
+        <input class="auth__input" type="password" id="key-input" autocomplete="off"
+               spellcheck="false" placeholder="sk-…" />
+      </label>
+
+      <div class="auth__actions">
+        <button class="auth__submit" id="key-save">保存</button>
+        <button class="auth__submit auth__submit--ghost" id="key-clear">清除</button>
+      </div>
+
+      <p class="auth__hint" style="margin-top: 10px">
+        密钥会加密后存在服务端，不会以明文保存，也不会再显示出来 ——
+        保存后这里只显示掩码。不配的话，规划会用站点的公共密钥，但可能受每日次数限制。
+      </p>
+    </section>
+
+    <p class="auth__message" id="message" role="status" aria-live="polite"></p>
+
+    <p class="auth__foot">
+      <a href="index.html">← 回到首页</a>
+      &nbsp;·&nbsp;
+      <a href="#" id="logout">退出登录</a>
+    </p>
+  </main>
+
+  <script src="scripts/account.js"></script>
+</body>
+</html>

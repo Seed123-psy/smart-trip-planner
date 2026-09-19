@@ -437,6 +437,39 @@
   }
 }
 
+/* 顶部临时提示条（分享链接已复制、分享链接失效之类）。
+   与 .map-error 分开：那个面板的标题写死了「地图暂时没能加载出来」，
+   拿它显示「分享链接已复制」会变成一句莫名其妙的话。 */
+.notice {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  max-width: min(560px, calc(100vw - 40px));
+  padding: 11px 18px;
+  border-radius: 99px;
+  background: var(--paper-0);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--shadow-raise);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-mid);
+  text-align: center;
+  /* 分享链接很长，必须允许在任意位置断行，否则会把屏幕撑开 */
+  word-break: break-all;
+}
+
+.notice[data-tone='ok'] {
+  border-color: var(--gold-line);
+  color: var(--gold-ink);
+}
+
+.notice[data-tone='error'] {
+  border-color: rgba(168, 56, 42, 0.3);
+  color: var(--cinnabar);
+}
+
 /* 地图加载失败 / key 未配置的提示 */
 .map-error {
   position: absolute;

@@ -1,0 +1,52 @@
+/* ============================================================
+   顶栏上的账号入口
+
+   首页顶栏与行程页信息带共用。两边的排版环境差别很大（一个是居中的
+   绝对定位顶栏，一个是紧凑的信息带），所以这里只定义「一组小字 + 链接」，
+   间距由各自容器控制。
+   ============================================================ */
+
+.session,
+[data-session-slot] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+.session__quota {
+  /* 比链接弱一档：它是状态，不是入口 */
+  color: var(--text-lo);
+}
+
+.session__link {
+  color: var(--text-mid);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.session__link:hover {
+  color: var(--gold-ink);
+  border-bottom-color: var(--gold-line);
+}
+
+/* 未登录时「登录」是唯一且重要的动作，给它实心一点的分量 */
+.session__link--strong {
+  color: var(--gold-ink);
+  font-weight: 500;
+}
+
+.session__sep {
+  color: var(--rule-strong);
+}
+
+/* 首页顶栏右侧那一组：示例链接与账号入口并排 */
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}

@@ -15,6 +15,10 @@
 
 'use strict';
 
+// sendJson 搬到 tools/http.js 了：api-router 与 serve.js 也要用它，
+// 留两份实现迟早分叉。这里再导出一次，是为了不动既有的调用方。
+const { sendJson } = require('./http');
+
 /**
  * 五个阶段的 id，顺序即执行顺序。
  * 前端 scripts/landing-flow.js 里有一份同序的副本（带中文标签）——
@@ -52,8 +56,13 @@ function frame(res, event, data) {
  *
  * 绝不设 Content-Length：带 Content-Length 的 text/event-stream 本身就不合法，
  * 而 Vercel 某些配置下会自动补上它。补上之后客户端可能整段攒到最后才收到。
+ *
+ * @returns {Promise<{ok: boolean, result?: object, error?: Error}>}
+ *   调用方（路由层）要靠它决定配额是结算还是退回。**必须是返回值而不是
+ *   在内部就把配额结掉** —— 这个文件只负责把一次规划推给客户端，
+ *   不该知道配额这回事。
  */
-async function streamPlan({ req, res, body, plan }) {
+async function streamPlan({ req, res, body, plan, options }) {
   try {
     res.writeHead(200, HEADERS);
     // 立刻冲一次：既让客户端确知连接已建立，也顺手冲掉代理的缓冲
@@ -70,18 +79,23 @@ async function streamPlan({ req, res, body, plan }) {
     }, 15000);
 
     try {
+      // options 透传下去：路由层已经决定好用谁的密钥了（见 serve.js 的 resolvePlanKey）。
+      // 流式与一次性两条路必须用同一份判断，否则「流式用了全局 key、
+      // 非流式用了用户 key」这种差异只会在对账时才发现。
       const result = await plan(body, (event) => {
         if (!closed) frame(res, 'stage', event);
-      });
+      }, options);
       if (!closed) {
         frame(res, 'result', result);
         res.end();
       }
+      return { ok: true, result };
     } catch (error) {
       if (!closed) {
         frame(res, 'error', { message: (error && error.message) || '规划失败' });
         res.end();
       }
+      return { ok: false, error };
     } finally {
       clearInterval(beat);
     }
@@ -89,13 +103,8 @@ async function streamPlan({ req, res, body, plan }) {
     // 写头之前就炸了（比如 socket 已断）：只能记日志，没法再告诉客户端什么
     console.error('[规划服务] 流式响应失败：', error && error.message);
     try { res.end(); } catch { /* 已经断了，无所谓 */ }
+    return { ok: false, error };
   }
-}
-
-/** 一次性 JSON 返回，两个入口共用同一份错误文案与头 */
-function sendJson(res, status, payload) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(payload));
 }
 
 module.exports = { STAGES, wantsStream, streamPlan, sendJson };

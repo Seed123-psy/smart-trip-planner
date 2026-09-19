@@ -28,20 +28,19 @@ const CACHE_FILE = path.join(CACHE_DIR, 'amap-cache.json');
  * 高德 Web 服务 key。
  *
  * 刻意不从 config.js 读 —— 那个文件会被浏览器加载，密钥放进去就等于公开。
- * 这里只认两个不会进浏览器的来源，线上是环境变量、本地是 config.local.js，
- * 和 serve.js 的 /api/amap 转发取的是同一份。
+ * 这里走与 serve.js / planner.js 同一套解析：环境变量 > 管理后台的数据库设置 >
+ * config.local.js，三个来源都不进浏览器。
+ *
+ * 这是个一次性生成器，所以在这里取一次并缓存下来。
  */
 const WEB_SERVICE_KEY = (() => {
-  if (process.env.AMAP_WEB_SERVICE_KEY) return process.env.AMAP_WEB_SERVICE_KEY;
-  try {
-    const key = require(path.join(ROOT, 'config.local.js')).amapWebServiceKey;
-    if (key) return key;
-  } catch {
-    /* 没这个文件就走下面的报错 */
-  }
+  const resolved = require('./keys').resolveAmapServiceKey();
+  if (resolved.value) return resolved.value;
+
+  if (resolved.problem) throw new Error(resolved.problem);
   throw new Error(
-    '未找到高德 Web 服务密钥。本地请在 config.local.js 里配置 amapWebServiceKey，' +
-      '或设置环境变量 AMAP_WEB_SERVICE_KEY。'
+    '未找到高德 Web 服务密钥。三个来源都没有：环境变量 AMAP_WEB_SERVICE_KEY、' +
+      '管理后台的密钥设置、以及本地的 config.local.js。'
   );
 })();
 

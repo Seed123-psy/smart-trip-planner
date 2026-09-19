@@ -1,8 +1,19 @@
 # 本地专用的高德 Web 服务密钥（明文）。线上用环境变量，绝不入库
 config.local.js
 
+# 依赖目录：由 package.json 重建，体量大且与源码无关，不入库。
+# package-lock.json 是要入库的 —— 它才是「装出来的到底是哪一版」的凭据
+node_modules/
+
 # 生成器的接口响应缓存：可随时重建，不必入库
 tools/.cache/
+
+# 旧的本地 SQLite 库。数据库已于 2026-09-19 迁到 MySQL（见 README 的「数据库」一节），
+# 这个文件现在有两个身份：导出 database.sql 的源、以及迁移的回退物 —— 两种情况都要求
+# 它保持原样，所以继续挡住。通配 *.db* 是为了把 WAL 模式的附属文件
+# app.db-wal / app.db-shm 一起挡住：只写 data/app.db 的话这两个会漏进仓库，
+# 而它们连同主库就能还原出全部数据。
+data/*.db*
 
 # 编辑器 / 系统
 .vscode/

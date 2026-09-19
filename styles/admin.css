@@ -1,0 +1,439 @@
+/* ============================================================
+   管理后台
+
+   与站点其余部分共用 base.css 的设计令牌，但布局是「工具」而不是「手账」：
+   信息密度更高，装饰更少。管理界面不该让人在密集操作里还要欣赏留白。
+   ============================================================ */
+
+.admin {
+  min-height: 100vh;
+  background: var(--paper-1);
+  padding-bottom: 60px;
+}
+
+.admin__bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 28px;
+  background: var(--paper-0);
+  border-bottom: 1px solid var(--rule);
+}
+
+.admin__brand {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-hi);
+  margin: 0;
+}
+
+.admin__who {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-lo);
+}
+
+.admin__who b {
+  color: var(--text-mid);
+  font-weight: 500;
+}
+
+/* 顶栏右侧那一组出口。与 .btn 同款外观，只是它们是链接不是按钮 */
+.admin__links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+a.btn {
+  text-decoration: none;
+  line-height: 1.6;
+}
+
+.admin__wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 28px 0;
+}
+
+/* ---------- 页签 ---------- */
+
+.admin__tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 22px;
+}
+
+.admin__tab {
+  padding: 9px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+
+.admin__tab:hover {
+  color: var(--text-hi);
+}
+
+.admin__tab[aria-selected='true'] {
+  color: var(--gold-ink);
+  border-bottom-color: var(--gold);
+  font-weight: 500;
+}
+
+/* ---------- 区块 ---------- */
+
+.admin__section {
+  background: var(--paper-0);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.admin__h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-hi);
+}
+
+.admin__note {
+  font-size: 12px;
+  color: var(--text-lo);
+  font-weight: 400;
+}
+
+.admin__select {
+  padding: 4px 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-mid);
+  background: var(--paper-1);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  font-weight: 400;
+}
+
+.admin__select:focus {
+  outline: none;
+  border-color: var(--gold-line);
+}
+
+/* ---------- 表格 ---------- */
+
+.admin__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin__table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-lo);
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+
+.admin__table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--text-mid);
+  vertical-align: middle;
+}
+
+.admin__table tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin__table .is-muted {
+  color: var(--text-lo);
+}
+
+.admin__empty {
+  padding: 28px 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-lo);
+}
+
+/* ---------- 徽标 ---------- */
+
+.tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.tag--admin {
+  background: var(--gold-soft);
+  color: var(--gold-ink);
+  border: 1px solid var(--gold-line);
+}
+
+.tag--user {
+  background: var(--paper-2);
+  color: var(--text-lo);
+  border: 1px solid var(--rule);
+}
+
+.tag--off {
+  background: rgba(168, 56, 42, 0.08);
+  color: var(--cinnabar);
+  border: 1px solid rgba(168, 56, 42, 0.2);
+}
+
+.tag--ok {
+  background: rgba(11, 122, 95, 0.08);
+  color: var(--travel);
+  border: 1px solid rgba(11, 122, 95, 0.2);
+}
+
+/* ---------- 按钮 ---------- */
+
+.btn {
+  padding: 5px 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 7px;
+  background: var(--paper-0);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: border-color 0.16s var(--ease), color 0.16s var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--gold-line);
+  color: var(--gold-ink);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn--danger:hover:not(:disabled) {
+  border-color: rgba(168, 56, 42, 0.4);
+  color: var(--cinnabar);
+}
+
+.btn--primary {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--gold-bright);
+  border-color: var(--gold-bright);
+  color: #fff;
+}
+
+.btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 表单 ---------- */
+
+.admin__form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field > span {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.field input {
+  padding: 7px 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-hi);
+  background: var(--paper-1);
+  border: 1px solid var(--rule-strong);
+  border-radius: 7px;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--gold-line);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.field--wide input {
+  width: 200px;
+}
+
+.field--narrow input {
+  width: 90px;
+}
+
+/* ---------- 提示条 ---------- */
+
+.admin__msg {
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  display: none;
+}
+
+.admin__msg[data-tone='error'] {
+  display: block;
+  background: rgba(168, 56, 42, 0.08);
+  border: 1px solid rgba(168, 56, 42, 0.22);
+  color: var(--cinnabar);
+}
+
+.admin__msg[data-tone='ok'] {
+  display: block;
+  background: rgba(11, 122, 95, 0.08);
+  border: 1px solid rgba(11, 122, 95, 0.22);
+  color: var(--travel);
+}
+
+/* ---------- 密钥卡片 ---------- */
+
+.keycard {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.keycard:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.keycard__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.keycard__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-hi);
+}
+
+.keycard__hint {
+  margin: 5px 0 9px;
+  font-size: 12px;
+  color: var(--text-lo);
+  line-height: 1.6;
+}
+
+.keycard__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.keycard__row input {
+  flex: 1 1 300px;
+  min-width: 220px;
+  padding: 7px 10px;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-hi);
+  background: var(--paper-1);
+  border: 1px solid var(--rule-strong);
+  border-radius: 7px;
+}
+
+.keycard__row input:focus {
+  outline: none;
+  border-color: var(--gold-line);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.keycard__row input:disabled {
+  background: var(--paper-2);
+  color: var(--text-lo);
+  cursor: not-allowed;
+}
+
+.keycard__problem {
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  background: rgba(168, 56, 42, 0.07);
+  border: 1px solid rgba(168, 56, 42, 0.2);
+  color: var(--cinnabar);
+}
+
+.keycard__locked {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.tag--env {
+  background: rgba(11, 122, 95, 0.08);
+  color: var(--travel);
+  border: 1px solid rgba(11, 122, 95, 0.2);
+}
+
+.tag--db {
+  background: var(--gold-soft);
+  color: var(--gold-ink);
+  border: 1px solid var(--gold-line);
+}
+
+.tag--file {
+  background: var(--paper-2);
+  color: var(--text-lo);
+  border: 1px solid var(--rule);
+}
+
+.admin__code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  letter-spacing: 0.1em;
+  color: var(--text-hi);
+  cursor: pointer;
+}
+
+.admin__row-detail {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+/* 收窄到本页，理由同 auth.css */
+.admin [hidden] {
+  display: none !important;
+}

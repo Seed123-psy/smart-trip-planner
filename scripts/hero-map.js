@@ -95,10 +95,23 @@
   }
 
   async function init() {
+    // loader.js 那三百多 KB 与密钥无关，先发出去。
+    // 放到下面那句 await 之后的话，配置接口一慢（最多 3 秒），
+    // 整个下载就被串行化推迟 3 秒 —— 而首页墨绘要等地图 complete 才开始画。
+    const loading = loadScript(LOADER_SRC);
+    // 先挂一个空 catch：下面读配置时可能先抛错，那时就没人接这个 promise 了，
+    // 会变成 unhandled rejection。挂上之后照样可以 await 它并拿到异常。
+    loading.catch(() => {});
+
+    // 服务端可能覆盖了密钥，必须等它落定再读。
+    // 全站只有这一处与行程页的 TripMap.init 需要等 —— 其余脚本读的是
+    // TRIP / DAY_HUE，与密钥无关。
+    if (window.TripRuntimeConfig) await window.TripRuntimeConfig.ready;
+
     const { WEB_JS_KEY, SECURITY_CODE } = CFG.AMAP;
     if (!WEB_JS_KEY) throw new Error('未配置高德 WebJS Key');
 
-    await loadScript(LOADER_SRC);
+    await loading;
     if (!window.AMapLoader) throw new Error('高德 JSAPI Loader 未加载');
 
     // 不加载任何插件：首页没有比例尺、没有工具条，一个控件都不要

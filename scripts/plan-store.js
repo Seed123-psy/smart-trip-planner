@@ -98,6 +98,57 @@
     return hasRenderableDay ? '' : '没有任何可渲染的地点';
   }
 
+  /* ---- 服务端侧的行程 id ----
+
+     规划成功时服务端会把整份结果落库，并把 id 挂回结果上。这里把它记下来，
+     等这个人登录之后再 POST /api/trips/claim 认领 ——
+     服务端并不知道「哪些匿名行程是同一个人规划的」，客户端手里的这几个 id
+     是唯一的线索。
+
+     单独一个 key、单独一份列表，而不是塞进上面那份交接数据里：
+     交接数据只有一份、会被下一次规划覆盖，而这几个 id 要攒着，
+     因为登录可能发生在规划之后很久。 */
+  const IDS_KEY = 'trip-ids-v1';
+  const MAX_IDS = 20;
+
+  /** @returns {Array<{id: string, token: string}>} */
+  function readIds() {
+    try {
+      const raw = sessionStorage.getItem(IDS_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) return [];
+      // 认领必须有 token，形状不对的条目直接丢掉 —— 留着也认领不了
+      return list.filter((x) => x && typeof x.id === 'string' && x.id && typeof x.token === 'string' && x.token);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 记下一条可认领的行程。
+   * @param {string} id     行程 id（读凭证，会出现在链接里）
+   * @param {string} token  认领凭证（只在规划那一次的响应里给过，别外传）
+   */
+  function saveId(id, token) {
+    if (typeof id !== 'string' || !id || typeof token !== 'string' || !token) return false;
+    try {
+      const list = readIds().filter((x) => x.id !== id);
+      list.unshift({ id, token });
+      sessionStorage.setItem(IDS_KEY, JSON.stringify(list.slice(0, MAX_IDS)));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function clearIds() {
+    try {
+      sessionStorage.removeItem(IDS_KEY);
+    } catch {
+      /* 无所谓 */
+    }
+  }
+
   /** 翻页过渡用的时间戳。行程页 <head> 里的内联脚本读它，见 styles/base.css 的 .pageveil */
   const ENTER_KEY = 'trip-enter-at';
 
@@ -113,5 +164,16 @@
     }
   }
 
-  window.TripPlanStore = { save, read, clear, markEntering, KEY, ENTER_KEY };
+  window.TripPlanStore = {
+    save,
+    read,
+    clear,
+    saveId,
+    readIds,
+    clearIds,
+    markEntering,
+    KEY,
+    ENTER_KEY,
+    IDS_KEY
+  };
 })();

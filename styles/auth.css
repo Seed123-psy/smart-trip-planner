@@ -1,0 +1,195 @@
+/* ============================================================
+   登录 / 注册页
+
+   只消费 base.css 的设计令牌，字段样式在这里自己写一遍而不是复用 form.css：
+   form.css 是给「规划表单」用的，它的字段里有城市选择、天数步进这些
+   这套页面不存在的东西，复用会把两处的改动绑在一起。
+   ============================================================ */
+
+.auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background: var(--paper-1);
+}
+
+.auth__card {
+  width: min(420px, 100%);
+  background: var(--paper-0);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 32px 30px 28px;
+}
+
+.auth__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-hi);
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.auth__subtitle {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-lo);
+  line-height: 1.6;
+}
+
+/* ---------- 页签 ---------- */
+
+.auth__tabs {
+  display: flex;
+  gap: 4px;
+  margin: 24px 0 20px;
+  padding: 3px;
+  background: var(--paper-2);
+  border-radius: var(--radius-sm);
+}
+
+.auth__tab {
+  flex: 1;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+
+.auth__tab:hover {
+  color: var(--text-hi);
+}
+
+.auth__tab[aria-selected='true'] {
+  background: var(--paper-0);
+  color: var(--gold-ink);
+  box-shadow: 0 1px 2px rgba(38, 33, 26, 0.07);
+}
+
+/* ---------- 字段 ---------- */
+
+.auth__field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.auth__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-mid);
+}
+
+.auth__input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text-hi);
+  background: var(--paper-1);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+
+.auth__input:focus {
+  outline: none;
+  border-color: var(--gold-line);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.auth__input::placeholder {
+  color: var(--text-lo);
+  opacity: 0.7;
+}
+
+/* 邀请码是手抄来的，等宽 + 字距让 O/0、I/1 这类易混字符更容易核对 */
+.auth__input--code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.auth__hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+/* ---------- 提交与提示 ---------- */
+
+.auth__submit {
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--gold);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), opacity 0.18s var(--ease);
+}
+
+.auth__submit:hover:not(:disabled) {
+  background: var(--gold-bright);
+}
+
+.auth__submit:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 错误与成功共用一块位置，避免出现时把下面的内容顶下去 */
+.auth__message {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+  display: none;
+}
+
+.auth__message[data-tone='error'] {
+  display: block;
+  background: rgba(168, 56, 42, 0.08);
+  border: 1px solid rgba(168, 56, 42, 0.22);
+  color: var(--cinnabar);
+}
+
+.auth__message[data-tone='ok'] {
+  display: block;
+  background: rgba(11, 122, 95, 0.08);
+  border: 1px solid rgba(11, 122, 95, 0.22);
+  color: var(--travel);
+}
+
+.auth__foot {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+  color: var(--text-lo);
+  line-height: 1.7;
+}
+
+.auth__foot a {
+  color: var(--gold-ink);
+}
+
+/* 收窄到本页，而不是全局 [hidden] —— 后者会在任何一次样式合并里
+   悄悄影响别的页面，而那时根本不会有人想到是这一行干的 */
+.auth [hidden] {
+  display: none !important;
+}

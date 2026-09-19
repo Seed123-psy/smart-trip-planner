@@ -28,25 +28,46 @@
   <link rel="stylesheet" href="styles/form.css" />
   <link rel="stylesheet" href="styles/editor.css" />
   <link rel="stylesheet" href="styles/planner.css" />
+  <link rel="stylesheet" href="styles/session.css" />
 
   <!-- 从首页过来才铺纸面（见 base.css 的 .pageveil）。
        必须放在 head 里同步执行：等到 body 末尾的脚本跑，首屏可能已经画出来了，
        纸面再铺上去反而闪一下。 -->
   <script>
     (function () {
+      // ?share= 与 ?trip= 要发请求才拿得到行程，期间也得铺着纸面。
+      // 不铺的话会先闪一下内置的武汉行程、再换成用户的那份 —— 而这两条
+      // 恰恰是「发给别人看」的链接，第一印象就是一晃。
+      //
+      // 这一句必须在 try **外面**：storage 被禁用时（Safari 无痕、站点数据拦截）
+      // 下面第一句 getItem 就会抛，needsFetch 根本来不及求值 ——
+      // 那样 ?share= 反而不会铺纸面，正好闪一下，与本意相反。
+      var needsFetch = /[?&](share|trip)=/.test(location.search);
+
       try {
         var at = Number(sessionStorage.getItem('trip-enter-at')) || 0;
         sessionStorage.removeItem('trip-enter-at');
-        if (at && Date.now() - at < 5000) {
+
+        if (needsFetch || (at && Date.now() - at < 5000)) {
           document.documentElement.className += ' is-entering';
         }
-      } catch (e) { /* 存不了 storage 就没有过渡，不影响别的 */ }
+      } catch (e) {
+        /* 存不了 storage 就没有过渡，不影响别的 —— 但取数那两条仍然要铺 */
+        if (needsFetch) document.documentElement.className += ' is-entering';
+      }
     })();
   </script>
 </head>
 
 <body>
   <div class="pageveil" aria-hidden="true"></div>
+
+  <!-- 顶部临时提示条（分享链接已复制、分享链接失效之类）。
+       与 map-error 分开：那个面板的标题写死了「地图暂时没能加载出来」，
+       拿它显示「分享链接已复制」会变成一句莫名其妙的话；
+       它也没有 role="status"，读屏用户听不到。
+       role + aria-live：这类提示是异步出现的，得让读屏软件主动念出来 -->
+  <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
   <div class="app">
 
     <!-- ================= 顶部关键信息带 ================= -->
@@ -66,6 +87,10 @@
         <!-- 当前实况，由 scripts/weather.js 取数、app.js 渲染；取不到时保持隐藏 -->
         <div class="wx wx--live" id="wx-live" hidden></div>
 
+        <!-- 账号入口。只读的分享视图里也会显示（看的人多半没登录），
+             那时它正好是一条「登录后自己也能规划」的路 -->
+        <span data-session-slot></span>
+
         <button class="edit-open" id="edit-open" type="button" aria-pressed="false">
           <svg
             class="ic"
@@ -83,6 +108,15 @@
             <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
           <span>编辑行程</span>
+        </button>
+
+        <button class="share-open" id="share-open" type="button" title="生成一条只读的分享链接，谁拿到都能看">
+          <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+            <path d="M12 3v13" />
+            <path d="m7 8 5-5 5 5" />
+          </svg>
+          <span>分享</span>
         </button>
 
         <button
@@ -330,6 +364,9 @@
 
   <!-- 数据层：改行程只需动 data/ 下的文件 -->
   <script src="config.js"></script>
+  <!-- 紧跟 config.js：它要尽早发出 /api/config 请求。读 CFG.AMAP 的 map.js
+       会在启动链上 await 它，其余脚本读的是 TRIP / DAY_HUE，不受影响 -->
+  <script src="scripts/runtime-config.js"></script>
   <script src="data/poi.js"></script>
   <script src="data/itinerary.js"></script>
   <script src="data/prep.js"></script>
@@ -356,5 +393,7 @@
   <script src="scripts/plan-client.js"></script>
   <script src="scripts/app.js"></script>
   <script src="scripts/planner.js"></script>
+  <!-- 账号入口。放最后：它要读 /api/me，但页面渲染不等它 -->
+  <script src="scripts/session-bar.js"></script>
 </body>
 </html>

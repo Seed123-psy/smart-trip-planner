@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理后台 · 行程手账</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#faf8f4" />
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b8801f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/><circle cx='12' cy='10' r='3'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/admin.css" />
+</head>
+
+<body class="admin">
+  <header class="admin__bar">
+    <h1 class="admin__brand">行程手账 · 管理后台</h1>
+    <span class="admin__who">当前管理员 <b id="who">…</b></span>
+
+    <!-- 后台原来只有「退出登录」，没有任何回站点的路 —— 进来之后
+         要么退出要么改地址栏。这里把两条正常的出口补上：
+         回首页（去看行程）与我的账号（配自己的密钥）。 -->
+    <nav class="admin__links">
+      <a class="btn" href="index.html">回首页</a>
+      <a class="btn" href="account.html">我的账号</a>
+      <button class="btn btn--danger" id="logout">退出登录</button>
+    </nav>
+  </header>
+
+  <div class="admin__wrap">
+    <nav class="admin__tabs" role="tablist">
+      <button class="admin__tab" role="tab" id="tab-users" aria-selected="true">用户</button>
+      <button class="admin__tab" role="tab" id="tab-invites" aria-selected="false">邀请码</button>
+      <button class="admin__tab" role="tab" id="tab-keys" aria-selected="false">密钥</button>
+      <button class="admin__tab" role="tab" id="tab-quota" aria-selected="false">配额</button>
+      <button class="admin__tab" role="tab" id="tab-audit" aria-selected="false">审计</button>
+    </nav>
+
+    <p class="admin__msg" id="message" role="status" aria-live="polite"></p>
+
+    <!-- ---------- 用户 ---------- -->
+    <section id="panel-users">
+      <div class="admin__section">
+        <h2 class="admin__h">
+          账号
+          <span class="admin__note" id="users-note"></span>
+        </h2>
+        <div id="users-body"><p class="admin__empty">载入中…</p></div>
+      </div>
+    </section>
+
+    <!-- ---------- 邀请码 ---------- -->
+    <section id="panel-invites" hidden>
+      <div class="admin__section">
+        <h2 class="admin__h">生成邀请码</h2>
+        <form class="admin__form" id="invite-form">
+          <label class="field field--wide">
+            <span>备注（发给谁）</span>
+            <input type="text" name="note" maxlength="120" placeholder="例如：给小李" />
+          </label>
+          <label class="field field--narrow">
+            <span>可用次数</span>
+            <input type="number" name="maxUses" min="1" max="1000" value="1" />
+          </label>
+          <label class="field field--narrow">
+            <span>有效天数</span>
+            <input type="number" name="days" min="1" max="3650" placeholder="留空=不过期" />
+          </label>
+          <button class="btn btn--primary" type="submit">生成</button>
+        </form>
+      </div>
+
+      <div class="admin__section">
+        <h2 class="admin__h">
+          已发出的邀请码
+          <span class="admin__note" id="invites-note"></span>
+        </h2>
+        <div id="invites-body"><p class="admin__empty">载入中…</p></div>
+      </div>
+    </section>
+
+    <!-- ---------- 密钥 ---------- -->
+    <section id="panel-keys" hidden>
+      <div class="admin__section">
+        <h2 class="admin__h">
+          密钥
+          <span class="admin__note">改动立即生效，不需要重启服务；浏览器需要刷新一次</span>
+        </h2>
+        <div id="keys-body"><p class="admin__empty">载入中…</p></div>
+      </div>
+
+      <div class="admin__section">
+        <h2 class="admin__h">
+          变更历史
+          <span class="admin__note" id="history-note"></span>
+        </h2>
+        <div id="history-body"><p class="admin__empty">载入中…</p></div>
+      </div>
+    </section>
+
+    <!-- ---------- 配额 ---------- -->
+    <section id="panel-quota" hidden>
+      <div class="admin__section">
+        <h2 class="admin__h">
+          每日配额
+          <span class="admin__note">没配自己密钥的人，每天能用公共密钥跑几次规划</span>
+        </h2>
+        <form class="admin__form" id="quota-form">
+          <label class="field field--narrow">
+            <span>每日次数</span>
+            <input type="number" name="limit" min="0" max="1000" />
+          </label>
+          <button class="btn btn--primary" type="submit">保存</button>
+        </form>
+        <p class="admin__hint" style="font-size:12px;color:var(--text-lo);line-height:1.7">
+          设为 0 表示不允许用公共密钥规划（只保留配了自己密钥的人）。<br />
+          管理员本身不受这个限制。次数按北京时间切分，不是 UTC。
+        </p>
+      </div>
+
+      <div class="admin__section">
+        <h2 class="admin__h">
+          今天的用量
+          <span class="admin__note" id="quota-note"></span>
+        </h2>
+        <div id="quota-body"><p class="admin__empty">载入中…</p></div>
+      </div>
+    </section>
+
+    <!-- ---------- 审计 ---------- -->
+    <section id="panel-audit" hidden>
+      <div class="admin__section">
+        <h2 class="admin__h">
+          操作记录
+          <select id="audit-filter" class="admin__select"></select>
+          <span class="admin__note" id="audit-note"></span>
+        </h2>
+        <div id="audit-body"><p class="admin__empty">载入中…</p></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="scripts/admin.js"></script>
+</body>
+</html>

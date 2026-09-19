@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 · 行程手账</title>
+  <!-- 私人站点，不希望被搜索引擎收录：链接只发给同行的人 -->
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#faf8f4" />
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b8801f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z'/><circle cx='12' cy='10' r='3'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/auth.css" />
+</head>
+
+<body class="auth">
+  <main class="auth__card">
+    <h1 class="auth__title">行程手账</h1>
+    <p class="auth__subtitle">登录后可保存行程、跨设备查看，也可以配置自己的模型密钥。</p>
+
+    <div class="auth__tabs" role="tablist">
+      <button class="auth__tab" role="tab" id="tab-login" aria-selected="true">登录</button>
+      <button class="auth__tab" role="tab" id="tab-register" aria-selected="false">注册</button>
+    </div>
+
+    <!-- ---------- 登录 ---------- -->
+    <form id="form-login" novalidate>
+      <label class="auth__field">
+        <span class="auth__label">用户名</span>
+        <input class="auth__input" type="text" name="username" autocomplete="username"
+               autocapitalize="none" spellcheck="false" required />
+      </label>
+
+      <label class="auth__field">
+        <span class="auth__label">口令</span>
+        <input class="auth__input" type="password" name="password" autocomplete="current-password" required />
+      </label>
+
+      <button class="auth__submit" type="submit">登录</button>
+    </form>
+
+    <!-- ---------- 注册 ---------- -->
+    <form id="form-register" novalidate hidden>
+      <label class="auth__field">
+        <span class="auth__label">用户名</span>
+        <input class="auth__input" type="text" name="username" autocomplete="username"
+               autocapitalize="none" spellcheck="false" required />
+        <p class="auth__hint">3—32 个字符，小写字母、数字、下划线、连字符</p>
+      </label>
+
+      <label class="auth__field">
+        <span class="auth__label">口令</span>
+        <input class="auth__input" type="password" name="password" autocomplete="new-password" required />
+        <p class="auth__hint">至少 8 位</p>
+      </label>
+
+      <label class="auth__field">
+        <span class="auth__label">邀请码</span>
+        <input class="auth__input auth__input--code" type="text" name="inviteCode"
+               autocapitalize="characters" spellcheck="false" required />
+        <p class="auth__hint">需要由管理员发放</p>
+      </label>
+
+      <button class="auth__submit" type="submit">注册并登录</button>
+    </form>
+
+    <p class="auth__message" id="message" role="status" aria-live="polite"></p>
+
+    <p class="auth__foot">
+      这个站点不开放注册，需要一个邀请码。<br />
+      <a href="index.html">← 先不登录，去看看示例行程</a>
+    </p>
+  </main>
+
+  <!-- 只是为了在登录成功后认领「还没登录时规划的那几份行程」——
+       那几个 id 记在 sessionStorage 里，见 scripts/plan-store.js 的说明 -->
+  <script src="scripts/plan-store.js"></script>
+  <script src="scripts/login.js"></script>
+</body>
+</html>
