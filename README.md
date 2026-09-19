@@ -643,7 +643,11 @@ MySQL 的 DDL 是隐式提交的，SQLite 那套「失败整体回滚」在这�
 
 ### 关于 database.sql
 
-它含 `users.password_hash`（scrypt 散列，弱口令可离线爆破），**仓库必须保持私有**。
+**它不入库**（已在 `.gitignore`）。理由是它含 `users.password_hash` ——
+scrypt 散列，弱口令可离线爆破，不该出现在公开仓库里。
+
+它是**生成物**：`node tools/export-sql.js` 随时可以重建，
+源库 `data/app.db` 一直在（脚本全程只读打开它，所以那份源库随时能再用）。
 
 四类数据在导出时被刻意排除 —— 它们要么拿到就能直接用，要么本来就没有价值：
 
@@ -785,7 +789,11 @@ curl "https://你的域名/api/amap?p=/v3/weather/weatherInfo&city=420100&extens
 
 <div align="center">
 
-**本仓库是私人的。** `database.sql` 含口令散列，`config.js` 里有可公开但仍应受限的 key。
-若要转为公开，需先把这两处摘干净，而不是直接改可见性。
+**关于仓库可见性**：`database.sql`（含口令散列）已从仓库**与 git 历史**中移除，
+所以这个仓库可以公开。`config.js` 里的高德 WebJS key 按设计就是公开的
+（它靠域名白名单限制来源，暴露了也只是不能被别的域名拿去用），留着没有问题。
+
+站点本身仍然是私密的：注册要邀请码，`index.html` 也带 `noindex` ——
+这两件事和仓库的可见性是分开的。
 
 </div>

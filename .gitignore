@@ -15,6 +15,11 @@ tools/.cache/
 # 而它们连同主库就能还原出全部数据。
 data/*.db*
 
+# 数据库导出文件：含 users.password_hash（scrypt 散列，弱口令可离线爆破），
+# 所以不入库 —— 它一度进过仓库，2026-09-19 连同历史一起清掉了。
+# 它是**生成物**：随时可用 node tools/export-sql.js 重建，源库 data/app.db 一直在。
+database.sql
+
 # 编辑器 / 系统
 .vscode/
 .idea/
