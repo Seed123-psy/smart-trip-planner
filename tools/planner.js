@@ -134,16 +134,26 @@ function loadLocalConfig() {
  * 「给定输入和密钥，产出行程」。让它去读会话，就再也无法单独测试或复用。
  * 所以这里只负责用给它的值，一切判断留在路由层。
  */
-function plannerConfig(overrides) {
+async function plannerConfig(overrides) {
   const local = loadLocalConfig();
   const opt = overrides || {};
 
+  /* 两把密钥走统一的解析层：环境变量 > 数据库 > config.local.js。
+     这样管理员在后台换 key 不用重启，也不用去动服务器上的文件。
+     每次调用现解析（会读一次库）—— 这个函数每次规划才调几次，不是每个请求都调。
+
+     【迁移到 MySQL 后这一步变成了异步】
+     解析要先开库读 settings 表，所以它是 Promise。而这里以前写的是
+     `resolveDeepseekKey().value` —— 那拿到的是 Promise 的 `.value`，
+     也就是 undefined。后果是两个密钥都变成空字符串：
+     模型调用直接 401、算路整段降级成直线，而报出来的错完全指不到这里。
+     迁移时改数据层没有连带检查 planner 的调用点，是漏网的一处。 */
+  const deepseekStored = await resolveDeepseekKey();
+  const amapStored = await resolveAmapServiceKey();
+
   return {
-    // 两把密钥走统一的解析层：环境变量 > 数据库 > config.local.js。
-    // 这样管理员在后台换 key 不用重启，也不用去动服务器上的文件。
-    // 每次调用现解析（会读一次库）—— 这个函数每次规划才调几次，不是每个请求都调。
-    key: String(opt.deepseekKey || '').trim() || resolveDeepseekKey().value || '',
-    amapKey: resolveAmapServiceKey().value || '',
+    key: String(opt.deepseekKey || '').trim() || deepseekStored.value || '',
+    amapKey: amapStored.value || '',
 
     // 下面两个是模型名，不是密钥，没必要进数据库
     model: process.env.DEEPSEEK_MODEL || local.deepseekModel || 'deepseek-flash',
@@ -971,7 +981,7 @@ async function makeRoutes(days, poiById, city, hardDeadline = Infinity) {
   // 一起发出去、由闸门与节流统一压速率；Promise.all 保序，路段顺序仍与行程一致
   const ctx = {
     city,
-    key: plannerConfig().amapKey,
+    key: (await plannerConfig()).amapKey,
     cache: new Map(),
     // 算路自己的预算和整个规划的预算取更紧的那个：规划快超时了就别再逐段算了
     deadline: Math.min(Date.now() + ROUTE_BUDGET_MS, hardDeadline)
@@ -1091,7 +1101,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
     poi,
     routes,
     warnings: warnings.slice(0, 12),
-    model: plannerConfig().model
+    model: (await plannerConfig()).model
   };
 }
 
@@ -1117,7 +1127,7 @@ async function plan(input, onStage, options) {
   };
 
   const request = normalizeRequest(input);
-  const config = plannerConfig(options);
+  const config = await plannerConfig(options);
   // 走到这里还取不到 key，只可能是全局那份也没配 ——
   // 「用户自己的 key 解不开」那种情况由路由层提前拦住，不会进到这个函数
   if (!config.key) throw new Error('服务端未配置 DeepSeek API Key');
