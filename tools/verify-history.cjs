@@ -1,0 +1,110 @@
+// Integration verification against a running local server; temporary test accounts are removed in finally.
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const { createUser } = require('./auth');
+const { createSession } = require('./sessions');
+const { getDb, closeDb } = require('./db');
+const trips = require('./trips');
+const fs = require('node:fs');
+const base = 'http://127.0.0.1:5173';
+const users = [];
+let browser;
+(async () => {
+  try {
+    browser = await chromium.launch({ channel: 'msedge', headless: true });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage();
+    page.on('dialog', dialog => dialog.accept());
+    await page.goto(base + '/trips.html');
+    await page.waitForURL('**/login.html?next=*');
+    await page.goto(base + '/trip.html?sample=1', { waitUntil: 'networkidle' });
+    const sample = await page.evaluate(() => ({ schemaVersion: 1, city: '武汉', startDate: '2026-10-03', endDate: '2026-10-06',
+      days: window.TRIP_ITINERARY.days, poi: window.TRIP_POI, routes: window.TRIP_ROUTES }));
+    for (let i = 0; i < 2; i++) users.push(await createUser({ username: 'qa_' + crypto.randomBytes(7).toString('hex'), password: crypto.randomBytes(24).toString('hex') }));
+    const sid = (await createSession(users[0].id, {})).token;
+    const otherSid = (await createSession(users[1].id, {})).token;
+    const auth = { Cookie: `sid=${sid}` };
+    const anonymous = await trips.save({ plan: sample, userId: null });
+    const beforeClaim = await trips.get(anonymous.id, null);
+    await trips.claim([{ id: anonymous.id, token: anonymous.claimToken }], users[1].id);
+    const afterClaim = await trips.get(anonymous.id, users[1]);
+    assert.equal(Number(afterClaim.updatedAt), Number(beforeClaim.updatedAt));
+    await trips.updateForUser(anonymous.id, users[1].id, sample, Number(beforeClaim.updatedAt));
+    await context.addCookies([{ name: 'sid', value: sid, url: base }]);
+    await page.goto(base + '/trips.html');
+    await page.getByText('还没有保存的行程。', { exact: false }).waitFor();
+    let saved;
+    for (let i = 0; i < 13; i++) saved = await trips.save({ plan: { ...sample, city: i === 0 ? '苏州' : '武汉' }, userId: users[0].id });
+    const list = await (await fetch(base + '/api/trips', { headers: auth })).json();
+    assert.equal(list.trips.length, 12); assert.equal(list.hasMore, true);
+    const search = await (await fetch(base + '/api/trips?q=' + encodeURIComponent('苏州'), { headers: auth })).json();
+    assert.equal(search.trips.length, 1);
+    const url = base + '/api/trips/' + saved.id;
+    const current = await (await fetch(url, { headers: auth })).json();
+    const body = JSON.stringify({ plan: sample, updatedAt: current.plan.updatedAt });
+    assert.equal((await fetch(url, { method: 'PUT', headers: { Cookie: `sid=${otherSid}`, 'Content-Type': 'application/json' }, body })).status, 404);
+    assert.equal((await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })).status, 401);
+    await page.goto(base + '/trips.html');
+    await page.locator('.trip-card').nth(11).waitFor();
+    await page.locator('#history-more').click();
+    await page.locator('.trip-card').nth(12).waitFor();
+    await page.locator('#history-query').fill('苏州');
+    await page.locator('#history-search button').click();
+    await page.waitForFunction(() => document.querySelectorAll('.trip-card').length === 1);
+    await page.goto(base + '/trip.html?trip=' + saved.id, { waitUntil: 'networkidle' });
+    await page.locator('#daybar button').nth(1).click();
+    await page.locator('#edit-open').click();
+    const time = page.locator('.stop__time--edit').first();
+    await time.fill('09:35'); await time.dispatchEvent('change');
+    await page.waitForFunction(() => document.getElementById('trip-save-status').textContent === '未保存');
+    await page.route('**/api/trips/' + saved.id, route => route.request().method() === 'PUT' ? route.abort() : route.continue());
+    await page.locator('#trip-save').click();
+    await page.waitForFunction(() => document.getElementById('trip-save-status').textContent.includes('本地修改已保留'));
+    await page.unroute('**/api/trips/' + saved.id);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => document.getElementById('trip-save-status').textContent === '未保存');
+    await page.locator('#trip-save').click();
+    await page.waitForFunction(() => document.getElementById('trip-save-status').textContent === '已保存');
+    const final = await (await fetch(url, { headers: auth })).json();
+    assert.equal(final.plan.days[0].visits[0].time, '09:35');
+    assert.equal((await fetch(url, { method: 'PUT', headers: { ...auth, 'Content-Type': 'application/json' }, body })).status, 409);
+    await page.goto(base + '/trips.html');
+    await page.locator('.trip-card').nth(11).waitFor();
+    fs.mkdirSync('.playwright-mcp', { recursive: true });
+    await page.screenshot({ path: '.playwright-mcp/history-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: '.playwright-mcp/history-mobile.png' });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    assert.equal((await fetch(url, { method: 'DELETE' })).status, 401);
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { Cookie: `sid=${otherSid}` } })).status, 404);
+    const shared = await trips.createShare(saved.id, users[0]);
+    const deleteButton = page.locator('.trip-card').filter({ has: page.locator(`a[href="trip.html?trip=${saved.id}"]`) }).getByRole('button');
+    page.removeAllListeners('dialog');
+    page.once('dialog', dialog => dialog.dismiss());
+    await deleteButton.click();
+    assert.equal((await fetch(url, { headers: auth })).status, 200);
+    page.on('dialog', dialog => dialog.accept());
+    await page.route('**/api/trips/' + saved.id, route => route.request().method() === 'DELETE' ? route.abort() : route.continue());
+    await deleteButton.click();
+    await page.getByText('删除失败：', { exact: false }).waitFor();
+    await page.unroute('**/api/trips/' + saved.id);
+    await deleteButton.click();
+    await page.waitForFunction(id => !document.querySelector(`a[href="trip.html?trip=${id}"]`), saved.id);
+    assert.equal((await fetch(url, { headers: auth })).status, 404);
+    assert.equal((await fetch(base + '/api/share/' + shared)).status, 404);
+    console.log('PASS: delete confirmation/cancel, failure retry, owner isolation, share invalidation');
+    console.log('PASS: authentication, anonymous claim + save, owner isolation, empty state, search, pagination, failed save retention, draft reload, UI save, conflict rejection, mobile layout');
+  } finally {
+    if (browser) await browser.close();
+    if (users.length) {
+      const db = await getDb();
+      for (const user of users) {
+        await db.execute('DELETE FROM trips WHERE user_id = ?', [user.id]);
+        await db.execute('DELETE FROM sessions WHERE user_id = ?', [user.id]);
+        await db.execute('DELETE FROM users WHERE id = ?', [user.id]);
+      }
+    }
+    await closeDb();
+  }
+})().catch(error => { console.error(error.message); process.exitCode = 1; });

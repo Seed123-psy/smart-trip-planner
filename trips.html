@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>我的行程 · 行程手账</title>
+  <link rel="stylesheet" href="styles/base.css"><link rel="stylesheet" href="styles/trips.css">
+</head>
+<body class="trips-page">
+  <main class="trips-shell">
+    <nav class="trips-nav"><a href="index.html">← 首页</a><a href="account.html">账号设置</a></nav>
+    <header class="trips-heading"><div><p class="trips-kicker">旅途有迹可循</p><h1>我的行程</h1><p>收藏在这里的每一次出发，随时回来接着安排。</p></div><a class="trips-primary" href="index.html">＋ 开始规划</a></header>
+    <form id="history-search" class="trips-search" role="search"><label for="history-query">查找行程</label><input id="history-query" type="search" maxlength="80" placeholder="输入城市或行程标题"><button type="submit">搜索</button></form>
+    <p class="trips-hint">按生成时间从新到旧排列 · 查看历史行程不会消耗 AI 生成额度</p>
+    <p id="history-status" role="status" aria-live="polite"></p>
+    <section id="history-list" class="trips-grid" aria-label="历史行程"></section>
+    <div class="trips-controls"><button id="history-retry" hidden>重试</button><button id="history-more" hidden>加载更多</button></div>
+  </main>
+  <script src="scripts/plan-store.js"></script>
+  <script src="scripts/trips.js"></script>
+</body>
+</html>

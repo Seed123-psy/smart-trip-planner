@@ -299,7 +299,9 @@
       routes: ROUTES,
       warnings: base.warnings || []
     };
+    plan._dirty = true;
     window.TripPlanStore.save(plan);
+    window.dispatchEvent(new CustomEvent('trip:changed', { detail: plan }));
   }
 
   /* ------------------------------------------------------------------ */

@@ -6,6 +6,10 @@
    间距由各自容器控制。
    ============================================================ */
 
+.session__history { padding: 6px 12px; border: 1px solid var(--rule-strong); border-radius: 99px; background: var(--paper-1); color: var(--text-mid); text-decoration: none; white-space: nowrap; font-size: 12px; }
+#trip-save[hidden] { display: none; }
+#trip-save-status { font-size: 12px; color: var(--text-lo); max-width: 230px; line-height: 1.5; }
+#trip-save:disabled { opacity: .5; cursor: default; }
 .session,
 [data-session-slot] {
   display: inline-flex;

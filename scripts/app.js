@@ -669,6 +669,7 @@
     if (window.TripRoute && window.TripRoute.clearCache) window.TripRoute.clearCache();
     if (window.TripMap && window.TripMap.clearCache) window.TripMap.clearCache();
     appliedPlan = plan;
+    window.dispatchEvent(new CustomEvent('trip:loaded', { detail: plan }));
     // 美食不是行前准备的一部分，它有自己的阶段和字段，所以两个一起传进去
     applyPrepData(plan.prep, plan.food);
     return cityChanged;
@@ -707,6 +708,10 @@
   /** 行程页内重新规划：写数据 + 就地重渲染 */
   async function applyGeneratedPlan(plan) {
     const cityChanged = applyPlanData(plan);
+    window.TripPlanStore.save(plan);
+    window.TripPlanStore.saveId(plan.tripId, plan.claimToken);
+    // 从历史行程里重新规划后，刷新也应打开新行程。
+    history.replaceState(null, '', plan.tripId ? 'trip.html?trip=' + encodeURIComponent(plan.tripId) : 'trip.html');
 
     if (cityChanged) {
       // 旧城市的天气要立刻撤下：清 state 只管住数据，DOM 得等新数据回来才会更新，
@@ -776,8 +781,10 @@
     const tripId = params.get('trip');
     if (tripId) {
       const mine = await fetchPlan('/api/trips/' + encodeURIComponent(tripId));
+      const draft = window.TripPlanStore.read();
       return mine
-        ? { plan: mine, readOnly: false, notice: null }
+        ? { plan: draft && draft.tripId === tripId && draft._dirty ? draft : mine, readOnly: false,
+          notice: draft && draft.tripId === tripId && draft._dirty ? '已恢复本地未保存的修改。' : null }
         : { plan: null, readOnly: false, notice: '找不到这份行程，或者你没有权限查看。' };
     }
 
@@ -952,6 +959,16 @@
     currentDayIndex: () => state.dayIndex,
     /** 编辑模式用：把改动存回 sessionStorage 时要有个底稿，见 editor.js 的 persist */
     currentPlan: () => appliedPlan,
+    savedRevision: (value, savedPlan) => {
+      if (!appliedPlan) return;
+      appliedPlan.updatedAt = value;
+      if (savedPlan) {
+        appliedPlan.warnings = savedPlan.warnings;
+        appliedPlan.userModified = true;
+        delete appliedPlan.scheduleCheck;
+        delete appliedPlan.repair;
+      }
+    },
     /** 编辑模式用：重画当前这天，不动滚动与镜头 */
     refreshDay,
     /** 编辑模式用：重算路段那几秒要有个加载态，否则像卡住了 */

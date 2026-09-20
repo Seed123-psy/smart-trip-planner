@@ -50,6 +50,7 @@
 
     for (const slot of slots) {
       slot.replaceChildren();
+      slot.append(el('session__history', '我的行程', 'trips.html'));
 
       // 「今天还剩几次」只对用公共密钥的人有意义。
       // 配了自己密钥的人与管理员拿到的是 null —— 给他们显示一个会一直

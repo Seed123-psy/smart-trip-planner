@@ -607,9 +607,21 @@ on('GET', '/api/admin/audit', async ({ res, query }) => {
 /* ---------- 行程与分享（阶段 6） ---------- */
 
 /** 我存过的行程 */
-on('GET', '/api/trips', async ({ req, res }) => {
+on('GET', '/api/trips', async ({ req, res, query }) => {
   const user = await requireUser(req);
-  sendJson(res, 200, { trips: await trips.listForUser(user.id, 100) });
+  sendJson(res, 200, await trips.historyForUser(user.id, query));
+});
+
+on('PUT', '/api/trips/:id', async ({ req, res, params }) => {
+  const user = await requireUser(req);
+  const body = await readJson(req, { limit: 2 * 1024 * 1024 });
+  sendJson(res, 200, { plan: await trips.updateForUser(params.id, user.id, body.plan, body.updatedAt) });
+});
+
+on('DELETE', '/api/trips/:id', async ({ req, res, params }) => {
+  const user = await requireUser(req);
+  await trips.removeForUser(params.id, user.id);
+  sendJson(res, 200, { deleted: true });
 });
 
 /**
@@ -623,7 +635,7 @@ on('GET', '/api/trips/:id', async ({ req, res, params }) => {
   // 把 id 一并回给客户端 —— 前端靠它决定要不要显示分享按钮。
   // 不回的话，用 ?trip=<自己的 id> 打开时前端拿不到 id，反而把分享按钮藏了：
   // 存下来的行程分享不了，只有刚规划完的那一次能分享。
-  sendJson(res, 200, { plan: Object.assign({}, trip.plan, { tripId: trip.id }), readOnly: false });
+  sendJson(res, 200, { plan: Object.assign({}, trip.plan, { tripId: trip.id, updatedAt: Number(trip.updatedAt) }), readOnly: false });
 });
 
 /**

@@ -112,6 +112,8 @@
           <span>编辑行程</span>
         </button>
 
+        <button class="share-open" id="trip-save" type="button" hidden disabled>保存修改</button>
+        <span id="trip-save-status" role="status" aria-live="polite"></span>
         <button class="share-open" id="share-open" type="button" title="生成一条只读的分享链接，谁拿到都能看">
           <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
@@ -421,5 +423,6 @@
   <script src="scripts/session-bar.js"></script>
   <!-- 放最后：它要用 TripTimeline 渲染打印版面 -->
   <script src="scripts/export-pdf.js"></script>
+  <script src="scripts/trip-save.js"></script>
 </body>
 </html>

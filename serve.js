@@ -39,7 +39,6 @@ const { getDb, describeTarget } = require('./tools/db');
 const { resolvePlanKey } = require('./tools/user-keys');
 const quota = require('./tools/quota');
 const trips = require('./tools/trips');
-const { currentUser } = require('./tools/auth');
 const {
   resolveAmapWebConfig,
   ignoredWarnings,
@@ -127,6 +126,7 @@ const PUBLIC_ROOT_FILES = new Set([
   'trip.html',
   'login.html',
   'account.html',
+  'trips.html',
   'admin.html',
   'config.js'
 ]);
@@ -242,7 +242,7 @@ async function handleRequest(req, res) {
       return;
     }
 
-    readPlanBody(req, res, resolved.options, quotaSubject);
+    await readPlanBody(req, res, resolved.options, quotaSubject, resolved.user);
     return;
   }
 
@@ -259,7 +259,7 @@ async function handleRequest(req, res) {
  * 的跨站表单就能驱动一次完整的七阶段规划。
  * 前端 scripts/plan-client.js 本来就发 application/json，切过来对正常调用零影响。
  */
-function readPlanBody(req, res, options, quotaSubject) {
+function readPlanBody(req, res, options, quotaSubject, viewer) {
   /* 配额在这里结算，而且**必须在这两条路上都结**。
      流式那条尤其容易漏：它在 client 断开之后仍然继续跑完，所以结算
      不能挂在连接事件上，只能挂在这个 promise 上。
@@ -277,12 +277,12 @@ function readPlanBody(req, res, options, quotaSubject) {
      这些请求是零成本的，而匿名访客的配额主体是 IP：办公室或学校共用一个
      出口地址时，一个人发几个畸形请求就能替所有人把当天的额度烧掉。 */
   let quotaSettled = false;
-  const settleQuota = (ok) => {
+  const settleQuota = async (ok) => {
     if (!quotaSubject || quotaSettled) return;
     quotaSettled = true;
     try {
-      if (ok) quota.settle(quotaSubject.subject, quotaSubject.day);
-      else quota.release(quotaSubject.subject, quotaSubject.day);
+      if (ok) await quota.settle(quotaSubject.subject, quotaSubject.day);
+      else await quota.release(quotaSubject.subject, quotaSubject.day);
     } catch (error) {
       console.error('[配额] 结算失败：', error && error.message);
     }
@@ -294,10 +294,9 @@ function readPlanBody(req, res, options, quotaSubject) {
 
      落库失败不影响把行程交回给用户：他等了 30 秒拿到的东西，
      不该因为一次写库失败而丢掉。 */
-  const viewer = currentUser(req);
   const planAndSave = (body, onStage, opts) =>
-    plan(body, onStage, opts).then((result) => {
-      const saved = trips.save({ plan: result, userId: viewer ? viewer.id : null });
+    plan(body, onStage, opts).then(async (result) => {
+      const saved = await trips.save({ plan: result, userId: viewer ? viewer.id : null });
       // claimToken 只出现在这个响应里 —— 它是「认领」的凭证，与 id（读凭证，
       // 会进链接）刻意分开。它不会进 payload：上面 save 存的是 result 本身，
       // 而这里返回的是它的一个副本
@@ -306,26 +305,26 @@ function readPlanBody(req, res, options, quotaSubject) {
         : result;
     });
 
-  readJson(req)
+  return readJson(req)
     .then((body) => {
       if (wantsStream(req)) {
         return streamPlan({ req, res, body, plan: planAndSave, options }).then((outcome) => settleQuota(outcome.ok));
       }
       return planAndSave(body, undefined, options).then(
-        (result) => {
-          settleQuota(true);
+        async (result) => {
+          await settleQuota(true);
           sendJson(res, 200, result);
         },
-        (error) => {
-          settleQuota(false);
+        async (error) => {
+          await settleQuota(false);
           throw error;
         }
       );
     })
-    .catch((err) => {
+    .catch(async (err) => {
       // 走到这里说明规划没跑起来（读请求体就失败了、或者 plan 抛了错）。
       // 预留要退回去 —— 不退回的话，几个畸形请求就能把当天的额度占满
-      settleQuota(false);
+      await settleQuota(false);
 
       // 流已经开了头就不能再改状态码了，只能把连接收掉
       if (res.headersSent) {
@@ -544,8 +543,9 @@ async function bootstrap() {
     });
 }
 
-bootstrap().catch((error) => {
+if (require.main === module) bootstrap().catch((error) => {
   // startupChecks 内部已经把每一段都 try 住了，走到这里说明是它之外的问题
   console.error('启动失败：', error && error.stack ? error.stack : error);
   process.exit(1);
 });
+module.exports = { handleRequest };

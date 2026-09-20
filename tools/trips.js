@@ -150,7 +150,62 @@ async function get(id, viewer) {
     return null;
   }
 
-  return { id: row.id, plan, createdAt: row.created_at, ownerId: row.user_id };
+  return { id: row.id, plan, createdAt: row.created_at, updatedAt: row.updated_at, ownerId: row.user_id };
+}
+
+async function historyForUser(userId, query = {}) {
+  const page = Math.max(1, Math.min(10000, parseInt(query.page, 10) || 1));
+  const search = String(query.q || '').trim().slice(0, 80);
+  const size = 12;
+  const db = await getDb();
+  const [rows] = await db.execute(
+    `SELECT id, city, title, created_at, updated_at,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$.startDate')) AS startDate,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$.endDate')) AS endDate,
+      JSON_LENGTH(JSON_EXTRACT(payload, '$.days')) AS days,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$.hotel.name')) AS hotel
+     FROM trips WHERE user_id = ? AND (LOCATE(?, COALESCE(city, '')) > 0 OR LOCATE(?, COALESCE(title, '')) > 0)
+     ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    [Number(userId), search, search, size + 1, (page - 1) * size]);
+  return { trips: rows.slice(0, size).map(row => ({ ...rowToSummary({ ...row, user_id: userId }),
+    startDate: row.startDate, endDate: row.endDate, days: row.days, hotel: row.hotel, updatedAt: row.updated_at })),
+    page, hasMore: rows.length > size };
+}
+
+function validateChanges(plan) {
+  if (!plan || !Array.isArray(plan.days) || !plan.days.length || plan.days.length > 14 ||
+      !plan.poi || typeof plan.poi !== 'object' || !plan.routes || !Array.isArray(plan.routes.legs)) {
+    throw new HttpError(400, '行程数据不完整');
+  }
+  if (plan.days.some(day => !day || !Array.isArray(day.visits) || !day.visits.length ||
+      day.visits.some(v => !v || (v.poiId != null
+        ? typeof v.poiId !== 'string' || !Object.hasOwn(plan.poi, v.poiId)
+        : typeof v.title !== 'string' || !v.title.trim())))) {
+    throw new HttpError(400, '行程存在无效地点或空白日期');
+  }
+  if (Buffer.byteLength(JSON.stringify(plan), 'utf8') > MAX_PAYLOAD_BYTES) throw new HttpError(413, '行程内容过大');
+}
+
+async function updateForUser(id, userId, changes, expectedUpdatedAt) {
+  validateChanges(changes);
+  if (!Number.isSafeInteger(expectedUpdatedAt)) throw new HttpError(400, '缺少保存版本，请重新打开行程');
+  const db = await getDb();
+  const [rows] = await db.execute('SELECT payload, updated_at FROM trips WHERE id = ? AND user_id = ?', [id, userId]);
+  if (!rows.length) throw new HttpError(404, '找不到可修改的行程');
+  if (Number(rows[0].updated_at) !== expectedUpdatedAt) throw new HttpError(409, '行程已在其他页面更新，本地改动已保留，请重新打开后核对');
+  const original = JSON.parse(rows[0].payload);
+  const plan = { ...original, days: changes.days, poi: changes.poi, routes: changes.routes, userModified: true };
+  delete plan.scheduleCheck;
+  delete plan.repair;
+  // 手动编辑后旧审校结论不再代表当前版本。
+  plan.warnings = ['行程已手动编辑，原 AI 时间校验结论不再适用，请核对修改后的时间安排。'];
+  for (const day of plan.days) day.summary = String(day.summary || '').replace(/时间校验待确认：[\s\S]*$/, '').replace(/已按交通耗时及每段[\s\S]*$/, '').trim();
+  validateChanges(plan);
+  const updatedAt = Math.max(Date.now(), expectedUpdatedAt + 1);
+  const [result] = await db.execute('UPDATE trips SET payload = ?, updated_at = ? WHERE id = ? AND user_id = ? AND updated_at = ?',
+    [JSON.stringify(plan), updatedAt, id, userId, expectedUpdatedAt]);
+  if (!result.affectedRows) throw new HttpError(409, '行程已更新，请重新打开后核对');
+  return { ...plan, tripId: id, updatedAt };
 }
 
 /** 某个用户存过的行程，新的在前。只给自己的列表用 */
@@ -186,15 +241,15 @@ async function claim(entries, userId) {
   if (!Array.isArray(entries) || !entries.length) return 0;
 
   const db = await getDb();
-  const now = Date.now();
 
   let n = 0;
   for (const entry of entries.slice(0, 50)) {
     if (!entry || typeof entry.id !== 'string' || typeof entry.token !== 'string') continue;
     // WHERE 里带着 AND user_id IS NULL，命中就必然改动 —— 与 CLIENT_FOUND_ROWS 无关
     const [result] = await db.execute(
-      'UPDATE trips SET user_id = ?, updated_at = ? WHERE id = ? AND claim_token = ? AND user_id IS NULL',
-      [Number(userId), now, entry.id, entry.token]
+      // 认领不改变行程内容，保留内容版本，让登录前的编辑草稿仍可保存。
+      'UPDATE trips SET user_id = ? WHERE id = ? AND claim_token = ? AND user_id IS NULL',
+      [Number(userId), entry.id, entry.token]
     );
     n += result.affectedRows;
   }
@@ -291,6 +346,14 @@ async function activeShare(tripId) {
   return rows[0] ? rows[0].token : null;
 }
 
+/** 用户列表删除：原子限定所有者，不接受匿名读取凭证。 */
+async function removeForUser(tripId, userId) {
+  const db = await getDb();
+  const [result] = await db.execute('DELETE FROM trips WHERE id = ? AND user_id = ?', [tripId, userId]);
+  if (!result.affectedRows) throw new HttpError(404, '行程不存在或已删除');
+  return true;
+}
+
 /** 删掉一份行程。分享链接靠外键级联一起走 */
 async function remove(tripId, viewer) {
   const trip = await get(tripId, viewer);
@@ -313,10 +376,14 @@ module.exports = {
   get,
   getByShare,
   listForUser,
+  historyForUser,
+  updateForUser,
+  validateChanges,
   claim,
   createShare,
   revokeShare,
   activeShare,
   remove,
+  removeForUser,
   count
 };
