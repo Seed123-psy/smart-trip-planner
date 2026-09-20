@@ -21,6 +21,10 @@
     eyebrow: document.getElementById('day-eyebrow'),
     title: document.getElementById('day-title'),
     summary: document.getElementById('day-summary'),
+    intro: document.getElementById('day-intro'),
+    introLabel: document.getElementById('day-intro-label'),
+    timingNote: document.getElementById('day-timing-note'),
+    timingMessage: document.getElementById('day-timing-message'),
     stats: document.getElementById('day-stats'),
     scroll: document.getElementById('sidebar-scroll'),
     mapStatus: document.getElementById('map-status'),
@@ -237,7 +241,16 @@
 
     dom.eyebrow.textContent = `${day.dateText} · ${day.label}`;
     dom.title.textContent = day.title;
-    dom.summary.textContent = day.summary;
+    const summary = String(day.summary || '');
+    const warningAt = summary.indexOf('时间校验待确认：');
+    dom.summary.textContent = warningAt >= 0 ? summary.slice(0, warningAt).trim() : summary;
+    dom.intro.open = false;
+    dom.introLabel.textContent = '行程介绍与天气';
+    const openingWarnings = Array.isArray(day.openingWarnings) ? day.openingWarnings : [];
+    dom.timingNote.hidden = warningAt < 0 && !openingWarnings.length;
+    document.getElementById('day-timing-label').textContent = openingWarnings.length ? '开放时间需确认' : '时间安排需确认';
+    dom.timingNote.open = false;
+    dom.timingMessage.textContent = [...openingWarnings, warningAt >= 0 ? summary.slice(warningAt) : ''].filter(Boolean).join('\n');
     renderDayWeather(day);
 
     const stops = renderSidebar(day, index);
@@ -285,6 +298,11 @@
 
     dom.eyebrow.textContent = `${ITINERARY.days.length} 天 · 全旅程`;
     dom.title.textContent = '行程总览';
+    dom.intro.open = false;
+    dom.introLabel.textContent = '查看总览说明';
+    dom.timingNote.hidden = true;
+    dom.timingNote.open = false;
+    dom.timingMessage.textContent = '';
     dom.summary.textContent =
       `合计 ${dist.value} ${dist.unit} · 在途 ${window.TripTimeline.formatDuration(duration)}。` +
       '点下面任意一天看当天的细节。';

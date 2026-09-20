@@ -10,7 +10,10 @@
 const path = require('path');
 const { resolveDeepseekKey, resolveAmapServiceKey } = require('./keys');
 const { redact } = require('./http');
-const { reconcileSchedule } = require('./schedule-check');
+const { optimizeSchedule } = require('./schedule-check');
+const { resolveHotel, attachHotel } = require('./hotels');
+const { calendar, checkOpeningRisks } = require('./opening-check');
+const { repairPlan } = require('./repair-plan');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/chat/completions';
@@ -114,6 +117,7 @@ function describeRequest(request) {
     interests: request.interests,
     startPoint: request.startPoint,
     endPoint: request.endPoint,
+    hotel: request.hotel,
     notes: request.notes
   };
 }
@@ -172,8 +176,6 @@ async function plannerConfig(overrides) {
  * 流式响应**不会**延长函数超时，所以这条线必须自己守。
  */
 const PLAN_BUDGET_MS = 90000;
-/** 审校跑一次最多要 45s，剩余时间不够就别起了 —— 起了也是被掐断 */
-const REVIEW_MIN_REMAINING_MS = 30000;
 /** 行前准备同样是一跳模型调用，留够时间再起 */
 const PREP_MIN_REMAINING_MS = 25000;
 
@@ -213,6 +215,7 @@ function normalizeRequest(input) {
   const days = Math.max(1, Math.min(14, Number(body.days) || dateDiff(startDate, endDate) + 1));
   return {
     city: cleanText(body.city, 40) || '武汉',
+    hotel: body.hotel || null,
     startDate,
     endDate,
     days,
@@ -390,6 +393,8 @@ function systemPrompt() {
   return [
     '你是旅行路线规划器。只能从本次高德实时搜索返回的 POI 目录中选择地点，不得创造新的 poiId。',
     '请根据日期、兴趣、预算和节奏安排可执行的多日行程，避免同一天跨城来回。',
+    '以 request.calendar 中的日期和星期为准。博物馆、美术馆、科技馆和纪念馆常有周一闭馆规则：无可靠开放依据时优先排到非周一；不能断言所有场馆周一闭馆，也不能因节假日就假定开放。只有周一可游览时，优先选择其他合适候选，并提示核实官方公告与预约。',
+    '如果 request.hotel 存在，这是用户确认的同一住宿点。按每天 departure 从酒店出发、returnBy 前回酒店来安排景点，预留首尾交通；不要把酒店写入 visits，服务端会自动补齐住宿起终点。不得用其他酒店替换。',
     dailyCapacityPrompt(),
     '输出必须是 JSON，不要 Markdown，不要解释 JSON 之外的内容。',
     '每天 visits 按时间递增；每个 visit 必须有 poiId、time、title、desc、stay、mode。',
@@ -422,6 +427,7 @@ function reviewPrompt() {
   return [
     '你是行程审校 Agent。逐天检查并修正：',
     '· 引用的 poiId 是否都在候选目录内；日期是否连续；时间是否递增；交通方式是否合理。',
+    '· 对照 request.calendar 和 candidatePoiCatalog 的场馆名称、类型，逐项检查是否把博物馆、美术馆等安排在周一。缺少可靠开放信息时优先移至其他可游览日期，连同地区顺路性一起重新排程；无法调换时选其他合适候选或明确警告，不能只改星期标签。节假日开放例外需要官方证据，不能凭常识编造。',
     dailyCapacityPrompt(),
     '· 太挤按时间冲突判断，不按点数判断：检查停留、转场、用餐和缓冲是否超出可用时段，优先删除低优先级或绕路的体验。',
     '· 太空按未被合理利用的时间判断：保留深度游、主动留白和必要休息；仅在有明显可用时间且存在符合兴趣的顺路候选时补点，禁止因点数少机械补齐。',
@@ -678,7 +684,7 @@ function prepPayload(plan, request) {
   };
 }
 
-async function callModel(messages, model, key) {
+async function callModel(messages, model, key, timeoutMs = REQUEST_TIMEOUT_MS) {
   const response = await fetch(DEEPSEEK_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -693,7 +699,7 @@ async function callModel(messages, model, key) {
       max_tokens: 12000,
       thinking: { type: 'disabled' }
     }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    signal: AbortSignal.timeout(timeoutMs)
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -717,9 +723,9 @@ async function callAgent(prompt, payload, config) {
     { role: 'user', content: JSON.stringify(payload, null, 2) }
   ];
   try {
-    return parseJson(await callModel(messages, config.model, config.key));
+    return parseJson(await callModel(messages, config.model, config.key, config.timeoutMs));
   } catch (error) {
-    if (config.model === config.fallbackModel || ![400, 404, 422].includes(error.status)) throw error;
+    if (config.timeoutMs || config.model === config.fallbackModel || ![400, 404, 422].includes(error.status)) throw error;
     return parseJson(await callModel(messages, config.fallbackModel, config.key));
   }
 }
@@ -964,7 +970,7 @@ async function legMetrics(from, to, mode, ctx) {
  * 只算 primary 那一种方式：时间轴、地图、总路程统计读的都只有 primary，
  * 把三种方式都算一遍要多发两倍请求，撞上 QPS 限制反而更容易降级成直线。
  */
-async function makeRoutes(days, poiById, city, hardDeadline = Infinity) {
+async function makeRoutes(days, poiById, city, hardDeadline = Infinity, routeCache = new Map()) {
   const locations = {};
   const pairs = [];
 
@@ -993,7 +999,7 @@ async function makeRoutes(days, poiById, city, hardDeadline = Infinity) {
   const ctx = {
     city,
     key: (await plannerConfig()).amapKey,
-    cache: new Map(),
+    cache: routeCache,
     // 算路自己的预算和整个规划的预算取更紧的那个：规划快超时了就别再逐段算了
     deadline: Math.min(Date.now() + ROUTE_BUDGET_MS, hardDeadline)
   };
@@ -1040,7 +1046,8 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
   if (!days.length) throw new Error('模型没有生成任何行程日');
 
   const safeDays = days.map((day, index) => {
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(day.date) ? day.date : addDays(request.startDate, index);
+    const dateInfo = calendar(request.startDate, request.days)[index];
+    const date = dateInfo.date;
     const visits = Array.isArray(day.visits) ? day.visits : [];
     return {
       // id 一律由下标生成，不采用模型给的值：id 是路线段的关联键、也是每日主题色的
@@ -1051,7 +1058,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
       index: index + 1,
       label: cleanText(day.label, 20) || `Day ${index + 1}`,
       date,
-      dateText: cleanText(day.dateText, 30) || date,
+      dateText: `${date} ${dateInfo.weekdayLabel}`,
       title: cleanText(day.title, 80) || `${request.city} 第 ${index + 1} 天`,
       summary: cleanText(day.summary, 300),
       visits: visits.map((visit) => {
@@ -1071,7 +1078,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
     };
   });
 
-  const selectedIds = new Set(safeDays.flatMap((day) => day.visits.map((visit) => visit.poiId)));
+  attachHotel(safeDays, request.hotel);
 
   // 备选池：**全部**检索到的点都要留着，不能只留排进行程的那些。
   // 编辑模式靠它回答「这一天还能加什么」，只留用过的就等于没有备选。
@@ -1081,6 +1088,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
   allPoi.forEach((item) => {
     poi[item.id] = ctx.pickedIds.has(item.id) ? { ...item, picked: true } : item;
   });
+  if (request.hotel) poi[request.hotel.id] = request.hotel;
 
   // 算路是这里最重的一步（每段一次高德请求），所以单独成一阶段。
   // 它的耗时上限还要受整个规划的预算约束，不能自己跑满 20 秒。
@@ -1088,7 +1096,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
   const routes = await stage(
     'routes',
     ctx.emit,
-    () => makeRoutes(safeDays, poi, request.city, ctx.deadline),
+    () => makeRoutes(safeDays, poi, request.city, ctx.deadline, ctx.routeCache),
     (out) => ({ legs: out.legs.length, estimatedLegs: out.summary.estimatedLegs })
   );
 
@@ -1099,10 +1107,12 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
     warnings.push(`有 ${routes.summary.estimatedLegs} 段路线没取到高德实时路径，按直线距离估算，出发前请再核对一次。`);
   }
 
-  const scheduleCheck = reconcileSchedule(safeDays, routes, request);
+  const scheduleCheck = optimizeSchedule(safeDays, routes, request);
+  const openingWarnings = checkOpeningRisks(safeDays, poi);
 
   return {
     schemaVersion: 1,
+    hotel: request.hotel,
     generatedAt: new Date().toISOString(),
     city: request.city,
     // 城市编码随产物回传，前端据此换天气与公交的城市参数
@@ -1114,7 +1124,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
     poi,
     routes,
     scheduleCheck,
-    warnings: [...scheduleCheck.warnings, ...warnings],
+    warnings: [...openingWarnings, ...scheduleCheck.warnings, ...warnings],
     model: (await plannerConfig()).model
   };
 }
@@ -1141,10 +1151,13 @@ async function plan(input, onStage, options) {
   };
 
   const request = normalizeRequest(input);
+  request.calendar = calendar(request.startDate, request.days);
   const config = await plannerConfig(options);
   // 走到这里还取不到 key，只可能是全局那份也没配 ——
   // 「用户自己的 key 解不开」那种情况由路由层提前拦住，不会进到这个函数
   if (!config.key) throw new Error('服务端未配置 DeepSeek API Key');
+
+  request.hotel = await resolveHotel(request.hotel, request.city);
 
   const deadline = Date.now() + PLAN_BUDGET_MS;
 
@@ -1209,32 +1222,28 @@ async function plan(input, onStage, options) {
     })
   );
 
-  // 审校 Agent 只接收草案和候选目录，避免它绕开第一阶段重新发散。
-  let reviewed = draft;
-  // 剩余时间还够跑一次审校才跑（别把 > 和 < 写反：写反了会永远跳过审校）
-  if (deadline - Date.now() >= REVIEW_MIN_REMAINING_MS) {
-    try {
-      reviewed = await stage('review', emit, () => callAgent(reviewPrompt(), {
-        request,
-        candidatePoiIds: selected.map((item) => item.id),
-        draft
-      }, config));
-    } catch (error) {
-      // 审校失败不该让整单失败：草案本身是可用的
-      logWarn('[规划服务] 审校 Agent 失败，使用排程结果：', error.message);
-    }
-  } else {
-    // 报 skipped 而不是假装没这个阶段：前端要能区分「审校过了」和「时间不够跳过了」
-    emit({ stage: 'review', status: 'skipped', message: '时间预算不足，跳过审校' });
-  }
-
-  // cityMeta 只给产物用，不进模型上下文：模型不需要城市编码，多给只是白烧 token
-  const result = await sanitizePlan(reviewed, { ...request, ...cityMeta }, items, {
-    emit,
-    deadline,
-    // 筛选 Agent 挑过的候选：进入产物时会标成 picked，供备选面板排序
-    pickedIds: new Set(selected.map((item) => item.id))
-  });
+  // 先算真实路线再审校；同次规划复用成功路段，调整时只请求新增/变化的路段。
+  const validationContext = { emit, deadline, routeCache: new Map(), pickedIds: new Set(selected.map(item => item.id)) };
+  const validate = raw => sanitizePlan(raw, { ...request, ...cityMeta }, items, validationContext);
+  const initial = await validate(draft);
+  const result = await stage('review', emit, () => repairPlan(initial, {
+    request, deadline, validate,
+    onAttempt: round => emit({ stage: 'review', status: 'start', message: `正在根据真实路线修复行程（第 ${round} 轮）` }),
+    revise: current => callAgent([
+      reviewPrompt(),
+      '这是实际算路后的修复。按 timingChecks、openingWarnings 和 actualRoutes 修复具体问题，不要重复返回同一份冲突日程。',
+      '允许删除低优先级地点、替换候选地点、调整日期与交通方式。保留用户的具体预约/抵离时刻、酒店和每日起止边界；不得缩短保留景点的游览时长来通过检查。每天至少保留一个有效游览点，天数和日期不能减少。',
+      'visits 不包含酒店节点（服务端自动插入）。停留时长写成明确分钟或小时。返回完整行程，summary 只写最终安排，不复制旧的校验提示；warnings 只保留仍成立的信息。',
+      '修复后服务端会重新算路验证，不能自己声明冲突已经解决。未知开放状态不是已确认开放，周一场馆优先移日或换点。'
+    ].join('\n'), {
+      request, candidatePoiCatalog: items,
+      draft: { days: current.days, warnings: current.warnings },
+      timingChecks: current.scheduleCheck,
+      openingWarnings: current.days.flatMap(day => day.openingWarnings || []),
+      actualRoutes: current.routes.legs.map(leg => ({ dayId: leg.dayId, fromIndex: leg.fromIndex, from: leg.from, to: leg.to,
+        mode: leg.primary, durationSeconds: leg.modes[leg.primary]?.duration, estimated: Boolean(leg.modes[leg.primary]?.estimated) }))
+    }, { ...config, timeoutMs: Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now() - 8000)) })
+  }), out => ({ repairStatus: out.repair.status, attempts: out.repair.attempts.length }));
 
   // 美食与行前准备都只依赖最终行程与实测路况，**彼此之间没有先后**，
   // 所以并行跑：省下较短那个的时间（实测 33.2s → 28s）。

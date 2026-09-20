@@ -28,6 +28,7 @@
   const checkedValues = (name) => window.TripPlanForm.checkedValues(form, name);
   /** 随日期实时更新的「共 N 天 + N 个色块」提示 */
   const daysHint = document.getElementById('planner-days-hint');
+  const selectedHotel = window.TripPlanForm.hotelPicker(form, fields.city);
 
   /** 当前表单所选的天数；日期不合法或终点早于起点时为 null */
   function selectedDays() {
@@ -75,6 +76,7 @@
       timing: checkedValues('timing'),
       interests: fields.interests.value,
       notes: fields.notes.value,
+      hotel: selectedHotel(),
       pace: fields.pace.value,
       budget: fields.budget.value
     };

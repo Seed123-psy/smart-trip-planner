@@ -67,6 +67,11 @@ const audit = require('./audit');
 /** 注册表。顺序即匹配顺序，同路径不同方法互不干扰 */
 const ROUTES = [];
 
+on('GET', '/api/hotels', async ({ query, res }) => {
+  const { searchHotels } = require('./hotels');
+  sendJson(res, 200, { hotels: await searchHotels(query.city, query.keyword) });
+});
+
 function segmentsOf(pathname) {
   return String(pathname).split('/').filter(Boolean);
 }

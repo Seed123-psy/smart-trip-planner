@@ -428,7 +428,7 @@
     const legs = stops.map((stop) => legFrom(day, stop)).filter(Boolean);
     const pick = (leg) => leg.modes[leg.primary] || {};
     return {
-      stops: stops.length,
+      stops: stops.filter(stop => !stop.visit.anchor).length,
       distance: legs.reduce((sum, leg) => sum + (pick(leg).distance || 0), 0),
       duration: legs.reduce((sum, leg) => sum + (pick(leg).duration || 0), 0)
     };

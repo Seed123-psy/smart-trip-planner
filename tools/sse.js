@@ -24,7 +24,7 @@ const { sendJson } = require('./http');
  * 前端 scripts/landing-flow.js 里有一份同序的副本（带中文标签）——
  * 浏览器与 Node 之间没有构建步骤可以共用模块，只能各留一份，改一处要一起改。
  */
-const STAGES = ['discover', 'select', 'schedule', 'review', 'routes', 'food', 'prep'];
+const STAGES = ['discover', 'select', 'schedule', 'routes', 'review', 'food', 'prep'];
 
 /**
  * 客户端是否要流式。

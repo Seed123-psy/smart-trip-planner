@@ -5,7 +5,7 @@
   "description": "六个 Agent 接力的 AI 行程规划器：高德实时检索 + 多 Agent 排程 + 真实道路算路",
   "scripts": {
     "start": "node serve.js",
-    "test": "node --test tools/schedule-check.test.js",
+    "test": "node --test tools/schedule-check.test.js tools/hotels.test.js tools/opening-check.test.js tools/repair-plan.test.js",
     "check": "node scripts/check-project.js"
   },
   "engines": {

@@ -307,7 +307,7 @@
   flex: 0 1 auto;
   min-height: 0;
   overflow: hidden;
-  padding: 20px 24px 16px;
+  padding: 16px 24px 12px;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -320,7 +320,7 @@
 
 .sidebar__title {
   font-family: var(--font-display);
-  font-size: 23px;
+  font-size: 21px;
   font-weight: 700;
   margin: 6px 0 8px;
   line-height: 1.35;
@@ -330,15 +330,50 @@
   font-size: 13px;
   color: var(--text-mid);
   margin: 0;
+  line-height: 1.75;
 }
+
+.day-intro { margin-top: 8px; }
+.day-intro > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--paper-1);
+  color: var(--text-mid);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.day-intro > summary::-webkit-details-marker { display: none; }
+.day-intro > summary:hover { background: var(--paper-2); }
+.day-intro > summary:focus-visible, .day-timing-note > summary:focus-visible {
+  outline: 2px solid var(--gold-ink);
+  outline-offset: 2px;
+}
+.day-intro__more { color: var(--gold-ink); white-space: nowrap; }
+.day-intro__more::after { content: '展开 ＋'; }
+.day-intro[open] .day-intro__more::after { content: '收起 −'; }
+.day-intro__body { padding: 10px 2px 2px; max-height: min(24vh, 220px); overflow-y: auto; overscroll-behavior: contain; }
+.day-timing-note { margin-top: 8px; font-size: 12px; }
+.day-timing-note[hidden] { display: none; }
+.day-timing-note > summary { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid rgba(168,56,42,.2); border-radius: 999px; background: rgba(168,56,42,.05); color: var(--cinnabar); cursor: pointer; line-height: 1.6; list-style: none; }
+.day-timing-note > summary::-webkit-details-marker { display: none; }
+.day-timing-note > summary::before { content: '！'; font-weight: 700; }
+.day-timing-note > summary:hover { background: rgba(168,56,42,.09); }
+.day-timing-note > summary span { color: var(--text-mid); margin-left: 8px; }
+.day-timing-note p { color: var(--text-mid); line-height: 1.7; margin: 8px 0 0; padding: 10px 14px; border-radius: 14px; background: var(--paper-1); max-height: 16vh; overflow-y: auto; white-space: pre-line; }
 
 /* 当日统计条 */
 .daystats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 14px;
-  padding-top: 13px;
+  gap: 8px 14px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px dashed var(--rule-strong);
 }
 
@@ -525,9 +560,7 @@
     margin: 4px 0 0;
   }
 
-  .sidebar__summary {
-    display: none;
-  }
+  .day-intro__body { max-height: 18vh; }
 
   .daystats {
     margin-top: 9px;

@@ -13,7 +13,8 @@
    否则改一次外观要记得改两处，而漏掉的那处只会在某个页面上看起来「有点不一样」。 */
 
 .edit-open,
-.share-open {
+.share-open,
+.export-open {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -29,14 +30,16 @@
 }
 
 .edit-open:hover,
-.share-open:hover {
+.share-open:hover,
+.export-open:hover {
   color: var(--gold-ink);
   border-color: var(--gold-line);
   background: var(--gold-soft);
 }
 
 .edit-open svg,
-.share-open svg {
+.share-open svg,
+.export-open svg {
   opacity: 0.85;
 }
 

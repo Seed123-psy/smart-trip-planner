@@ -7,14 +7,17 @@ function clockMinutes(value) {
 
 // 只解析明确的时长；范围取上限，不把无法识别的描述当作零分钟。
 function stayMinutes(value) {
-  const s = String(value || '').trim().replace(/约|大约/g, '').trim();
+  const s = String(value || '').trim().replace(/大约|约/g, '').trim();
   let m = /^(\d+(?:\.\d+)?)\s*(?:[—–\-~～至到]\s*(\d+(?:\.\d+)?))?\s*(小时|分钟|h|min)$/i.exec(s);
   if (m) {
     const n = Math.max(+m[1], +(m[2] || m[1]));
     return n > 0 ? Math.ceil(n * (/小时|^h$/i.test(m[3]) ? 60 : 1)) : null;
   }
   m = /^(\d+)\s*小时\s*(半|\d+\s*分钟)?$/.exec(s);
-  if (m) return +m[1] * 60 + (m[2] === '半' ? 30 : parseInt(m[2] || '0', 10));
+  if (m) {
+    const total = +m[1] * 60 + (m[2] === '半' ? 30 : parseInt(m[2] || '0', 10));
+    return total > 0 ? total : null;
+  }
   return s === '半小时' ? 30 : null;
 }
 
@@ -30,7 +33,7 @@ function reconcileSchedule(days, routes, request = {}) {
   for (const day of days) {
     const visits = day.visits;
     const proposed = visits.map(v => clockMinutes(v.time));
-    const stays = visits.map(v => stayMinutes(v.stay));
+    const stays = visits.map(v => v.anchor === 'hotel-departure' || v.anchor === 'hotel-return' ? 0 : stayMinutes(v.stay));
     const issues = [];
     const changes = [];
     let estimated = false;
@@ -59,9 +62,10 @@ function reconcileSchedule(days, routes, request = {}) {
         (proposed[last] + stays[last] >= 1440 || (originalEnd !== null && proposed[last] + stays[last] > originalEnd))) {
       issues.push('顺延后会超过原定当天结束时间，需要减少地点或调整日期');
     }
-    // 有预约、抵离等自由文本时，不能把时刻擅自改成另一个承诺。
-    if (changes.length && /预约|航班|火车|高铁|返程|抵达|离开|闭馆|关门/.test(
-      [request.notes, request.startPoint, request.endPoint, day.summary, ...visits.map(v => `${v.desc} ${v.advice}`)].join(' '))) {
+    // 只有含具体钟点的预约/抵离要求才构成固定时刻；“通常需预约”不是冲突。
+    const fixedTime = text => /\d{1,2}:\d{2}/.test(text || '') && /预约|航班|火车|高铁|返程|抵达|离开|闭馆|关门/.test(text || '');
+    if (changes.length && ([request.notes, request.startPoint, request.endPoint].some(fixedTime) ||
+        changes.some(change => fixedTime(`${visits[change.index].desc} ${visits[change.index].advice}`)))) {
       issues.push('涉及预约、抵离或开放时段，需确认固定时刻后重新排程');
     }
     if (estimated) issues.push('含估算交通耗时，尚不能确认真实时间可行性');
@@ -82,4 +86,56 @@ function reconcileSchedule(days, routes, request = {}) {
   return { reports, warnings, scope: '相邻景点停留、交通和转场缓冲；不验证开放时间、预约、餐饮或机场接驳' };
 }
 
-module.exports = { reconcileSchedule, clockMinutes, stayMinutes };
+/** 使用已经取得的真实公交备选尝试修复，不增加 API 调用，也不变更地点。 */
+function optimizeSchedule(days, routes, request = {}) {
+  const reports = [];
+  const warnings = [];
+  const modeChanges = [];
+  for (let d = 0; d < days.length; d++) {
+    const originalDay = days[d];
+    let trialDays = [structuredClone(originalDay)];
+    let report = reconcileSchedule(trialDays, routes, request);
+    const fixedTransport = ['family', 'seniors'].includes(request.party) || /打车|出租车|自驾|包车|地铁|公交|步行|轮椅|无障碍/.test(
+      [request.notes, request.interests, ...originalDay.visits.map(v => `${v.desc || ''} ${v.advice || ''}`)].join(' '));
+    if (report.reports[0].status === 'needs_review' && report.reports[0].changes.length && !fixedTransport) {
+      const candidateRoutes = structuredClone(routes);
+      const candidateDays = [structuredClone(originalDay)];
+      const candidates = [];
+      for (const leg of candidateRoutes.legs) {
+        if (leg.dayId !== originalDay.id || leg.primary !== 'driving') continue;
+        const current = leg.modes.driving;
+        const alternative = leg.modes.transit;
+        const target = candidateDays[0].visits[leg.fromIndex + 1];
+        if (!target || target.poiId !== leg.to || !current || current.estimated || !alternative || alternative.estimated ||
+            !Number.isFinite(current.duration) || current.duration <= 0 ||
+            !Number.isFinite(alternative.duration) || alternative.duration <= 0 ||
+            alternative.duration >= current.duration) continue;
+        leg.primary = 'transit';
+        target.mode = 'transit';
+        candidates.push({ dayId: leg.dayId, fromIndex: leg.fromIndex, from: 'driving', to: 'transit',
+          savedMinutes: Math.floor((current.duration - alternative.duration) / 60) });
+      }
+      if (candidates.length) {
+        const checked = reconcileSchedule(candidateDays, candidateRoutes, request);
+        // 原子接受：不能只改交通而留下另一个时间冲突，失败则全部保留原样。
+        if (checked.reports[0].status !== 'needs_review') {
+          routes.legs = candidateRoutes.legs;
+          trialDays = candidateDays;
+          report = checked;
+          modeChanges.push(...candidates);
+          const note = `已采用 ${candidates.length} 段更快的高德公交方案，并重新通过时间衔接校验；请核对换乘与步行要求。`;
+          trialDays[0].summary = `${trialDays[0].summary || ''} ${note}`.trim();
+          report.warnings.push(`${originalDay.label || originalDay.id}：${note}`);
+          report.reports[0].status = 'adjusted';
+        }
+      }
+    }
+    days[d] = trialDays[0];
+    reports.push(...report.reports);
+    warnings.push(...report.warnings);
+  }
+  return { reports, warnings, modeChanges,
+    scope: '相邻景点停留、交通和转场缓冲；不验证开放时间、预约、餐饮或机场接驳' };
+}
+
+module.exports = { reconcileSchedule, optimizeSchedule, clockMinutes, stayMinutes };

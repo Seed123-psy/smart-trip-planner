@@ -20,7 +20,7 @@
    * 七个阶段的 id，与 tools/sse.js 的 STAGES 同序。
    * 浏览器与 Node 之间没有构建步骤可以共用模块，只能各留一份，改一处要一起改。
    */
-  const STAGES = ['discover', 'select', 'schedule', 'review', 'routes', 'food', 'prep'];
+  const STAGES = ['discover', 'select', 'schedule', 'routes', 'review', 'food', 'prep'];
 
   /** 单跳模型调用的上限是 45s，空闲判定要比它长，否则会把正常的长调用误杀 */
   const IDLE_TIMEOUT_MS = 60000;

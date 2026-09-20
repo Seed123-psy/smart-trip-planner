@@ -32,14 +32,15 @@
     notes: document.getElementById('plan-notes')
   };
   const daysHint = document.getElementById('plan-days-hint');
+  const selectedHotel = window.TripPlanForm.hotelPicker(form, fields.city);
 
   /** 顺序必须与 tools/sse.js 的 STAGES 一致，两边靠 id 对应 */
   const STAGE_LABELS = {
     discover: '检索 POI',
     select: '筛选候选',
     schedule: '排程',
-    review: '审校',
     routes: '高德算路',
+    review: '复核与修复',
     food: '当地美食',
     prep: '行前准备'
   };
@@ -255,6 +256,7 @@
       timing: pick('timing'),
       interests: fields.interests.value,
       notes: fields.notes.value,
+      hotel: selectedHotel(),
       pace: fields.pace.value,
       budget: fields.budget.value
     };
@@ -391,7 +393,9 @@
 
   // 点抽屉以外的地方收起它。CTA 自己会开抽屉，别被这条顺手关掉。
   document.addEventListener('click', (event) => {
-    if (sheet.hidden || sheet.contains(event.target) || cta.contains(event.target)) return;
+    // 酒店选中后会移除结果按钮；事件路径保留点击时的祖先，contains 则只看当前 DOM。
+    const path = event.composedPath();
+    if (sheet.hidden || path.includes(sheet) || path.includes(cta)) return;
     close();
   });
 

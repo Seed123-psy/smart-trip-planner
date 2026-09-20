@@ -158,14 +158,16 @@
     if (!day || !poi || !Array.isArray(poi.coords)) return;
     if (day.visits.some((v) => v.poiId === poiId)) return;
 
-    const last = day.visits[day.visits.length - 1];
+    const returnIndex = day.visits.findIndex(v => v.anchor === 'hotel-return');
+    const insertIndex = returnIndex >= 0 ? returnIndex : day.visits.length;
+    const last = day.visits[insertIndex - 1];
     const previous = last && POI[last.poiId] && POI[last.poiId].coords;
     const near = previous ? haversine(previous, poi.coords) < WALKABLE_METERS : false;
 
-    day.visits.push({
+    day.visits.splice(insertIndex, 0, {
       poiId,
       // 排在最后一个点之后一小时，用户觉得不合适再改 —— 比让他从零填一个时间省事
-      time: nextHour(lastTimeOf(day)),
+      time: nextHour(last ? last.time : '16:00'),
       title: poi.name,
       desc: poi.note || '',
       stay: '',

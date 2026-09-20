@@ -1,3 +1,23 @@
+.hotel-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-1);
+  font-size: 12px;
+}
+.hotel-picker legend { font-weight: 600; padding: 0 6px; }
+.hotel-picker p { font-size: 12px; line-height: 1.6; color: var(--text-mid, #555); margin: 8px 0; }
+.hotel-picker label { display: grid; gap: 6px; margin: 8px 0; }
+.hotel-picker input { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px; }
+.hotel-picker button { padding: 9px 12px; margin: 4px 0; border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--paper-0); color: var(--text-hi); cursor: pointer; font: inherit; }
+.hotel-picker button:hover { border-color: var(--gold-ink); background: var(--gold-soft); }
+.hotel-picker button:disabled { opacity: .55; cursor: wait; }
+.hotel-picker__results button { display: block; width: 100%; text-align: left; line-height: 1.5; }
+.hotel-picker :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.hotel-picker [hidden] { display: none !important; }
+
 /* ============================================================
    共用表单控件：选项胶囊组 + 天数提示
 

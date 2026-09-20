@@ -215,9 +215,17 @@
         <div class="sidebar__head">
           <span class="sidebar__eyebrow" id="day-eyebrow"></span>
           <h2 class="sidebar__title" id="day-title"></h2>
-          <p class="sidebar__summary" id="day-summary"></p>
-          <!-- 当日天气；行程日超出高德 4 天预报窗口时改为显示「何时可查」 -->
-          <div class="wx wx--day" id="wx-day" hidden></div>
+          <details class="day-intro" id="day-intro">
+            <summary><span id="day-intro-label">行程介绍与天气</span><span class="day-intro__more" aria-hidden="true"></span></summary>
+            <div class="day-intro__body">
+              <p class="sidebar__summary" id="day-summary"></p>
+              <div class="wx wx--day" id="wx-day" hidden></div>
+            </div>
+          </details>
+          <details class="day-timing-note" id="day-timing-note" hidden>
+            <summary><span id="day-timing-label">时间安排需确认</span><span>查看原因</span></summary>
+            <p id="day-timing-message"></p>
+          </details>
           <div class="daystats" id="day-stats"></div>
         </div>
         <div class="sidebar__scroll" id="sidebar-scroll"></div>
