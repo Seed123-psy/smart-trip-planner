@@ -60,18 +60,35 @@
 | MySQL | 8.0+（本地开发；线上不依赖） |
 | 依赖 | 只有 `mysql2` 一个，`npm install` 即可 |
 
-### 三步跑起来
+### 首次启动
 
-```bash
+```powershell
 npm install                                  # 只有一个依赖：mysql2
-mysql -u root -p < database.sql              # 建库 + 导入数据（或见「数据库」一节用空库方式）
-node serve.js                                # 打开 http://localhost:5173
+Copy-Item config.local.example.js config.local.js  # Windows；然后填写密钥和数据库口令
+mysql -u root -p -e "CREATE DATABASE itinerary DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+npm start                                    # 打开 http://localhost:5173
 ```
 
 首页是 `/`，行程页是 `/trip.html`。
 
-密钥与数据库口令填在 `config.local.js` 里（模板见该文件注释）。这个文件**不部署、不入库**，
+密钥与数据库口令填在由 `config.local.example.js` 复制出的 `config.local.js` 里。这个文件**不部署、不入库**，
 `.gitignore` 与 `.vercelignore` 双重排除，`serve.js` 也拒绝把它当静态文件发出。
+
+`APP_SECRET` 只从环境变量读取，不要写入配置文件。它用于加密用户自配的 DeepSeek 密钥；以后重启时必须继续使用同一个值，
+否则已有密文无法解开。已有配置时请复用，不能每次启动重新生成。
+Windows 用户环境变量已保存该值、但当前终端尚未刷新时，可在 `npm start` 前执行：
+
+```powershell
+$env:APP_SECRET = [Environment]::GetEnvironmentVariable('APP_SECRET', 'User')
+```
+
+首次配置可用 `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+生成随机值，保存到部署环境的密钥配置或本机用户环境变量中；不要提交到 Git。
+
+首次启动会自动创建空库中的表。仓库内置的武汉示例行程可直接浏览，无需导入数据库备份。
+`database.sql` 含用户口令散列，不随仓库提供；恢复既有账号和行程时才需要自己的安全备份。
+
+在 macOS、Linux 或 Git Bash 中，可用 `cp config.local.example.js config.local.js` 完成复制。
 
 > **不要用 `file://` 直接双击 `index.html`。** 密钥移出浏览器之后，算路与天气
 > 必须经同源的 `/api/amap` 转发，而 `file://` 下不存在同源后端 ——
@@ -96,6 +113,7 @@ node serve.js                                # 打开 http://localhost:5173
 
 ```
 config.js                 浏览器侧的密钥与行程元信息（含每日配色 DAY_HUE）
+config.local.example.js   本地配置模板（可复制为 config.local.js）
 config.local.js           本地私有配置：高德/DeepSeek 密钥 + MySQL 连接（不入库）
 index.html                首页 —— 静置底图 + 墨绘 + 阶段管线 + 规划表单
 trip.html                 行程页 —— 时间轴 + 地图
@@ -103,8 +121,8 @@ login.html                登录 / 注册（注册需邀请码）
 account.html              个人账号页（填自己的 DeepSeek 密钥、看今日剩余次数）
 admin.html                管理后台（账号、邀请码、密钥、配额、审计）
 serve.js                  本地服务：静态文件 + 接口路由表 + /api/amap + /api/plan
-database.sql              数据库导出：建表语句 + 数据。**含口令散列，仓库须私有**
-package.json              唯一依赖：mysql2
+database.sql              本地生成的数据库导出（不入库，含口令散列）
+package.json              启动与检查命令；运行依赖只有 mysql2
 
 api/
   amap.js                 线上 serverless 转发函数（密钥读环境变量）
@@ -117,6 +135,7 @@ data/
   routes-legs.js          自动生成，勿手改
 
 scripts/                  浏览器侧（无构建步骤，直接 ES module）
+  check-project.js        Node 开发工具：语法检查 + 示例数据体检（不由页面加载）
   date.js                 日期工具，weather 与 prep 共用
   route.js                调高德 Web 服务取真实道路路径（含降级）
   weather.js              调高德天气接口取实况与预报（运行期，不落盘）
@@ -149,6 +168,8 @@ tools/                    服务端（Node，CommonJS）
   amap-proxy.js           高德转发逻辑，serve.js 与 api/amap.js 共用
   static-map.js           静态地图：把某天的路线渲染成 PNG，供导出 PDF 用
   planner.js              DeepSeek 规划：筛选/排程/审校/美食/行前准备 + 高德算路装配
+  schedule-check.js       算路后的时间衔接校验与有限自动顺延
+  schedule-check.test.js  时间冲突回归测试（npm test）
   sse.js                  SSE 帧写入器，serve.js 与 api/plan.js 共用
   generate-routes.js      构建期：地理编码 + 批量算路
   check-data.js           构建期：数据体检（含天数与配色断言）
@@ -183,25 +204,29 @@ tools/                    服务端（Node，CommonJS）
 共用同一套表单件与接口。
 
 服务端先用高德地点搜索接口按城市实时获取景点候选，再经过**筛选 → 排程 → 审校**三个
-Agent，按高德算路接口补齐每段的真实距离与耗时，最后跑**当地美食**与**行前准备**两个
+Agent，按高德算路接口补齐每段的真实距离与耗时，再执行服务端时间衔接校验，最后跑**当地美食**与**行前准备**两个
 Agent。合起来是六个 Agent（另有两步是纯高德工具：检索、算路）。模型只能引用本次搜索返回的地点，
 结果只允许结构化 JSON；服务端会校验 `poiId`、出行方式和日期，并按坐标补齐路线数据。
 因此输入苏州、三亚等城市时不会复用武汉景点，模型也不会直接生成 HTML 或接触 API 密钥。
 
-几点值得知道的约束：
+### 如何决定每天怎么玩
 
-- **换行程时全局量是替换、不是合并**。`TRIP_POI` / `TRIP_ROUTES.locations` 都从
-  `data/*.js` 初始化，装的是内置武汉行程那一套。规划到别的城市时若用 `Object.assign`
-  合并，武汉的点会留在池子里 —— 编辑模式的备选里会冒出「黄鹤楼」这种和桂林毫无关系的
-  选项，看起来还挺像回事。必须**原地清空再灌入**（保持对象身份，其余模块都攥着引用），
-  不能整个替换掉 `window.TRIP_POI`。
-- **检索词由「风格偏好」直接决定**。模型只能从检索回来的目录里挑地点，目录里没有的东西
-  它变不出来 —— 所以「自然风光」必须映射成「公园 / 风景区」再去搜，只写在提示词里没用。
-- **每天的景点密度是写死的**：整天 4—6 个。确实排不满（抵离日只有半天、候选里没有合适的）
-  允许少，但当天 `summary` 必须写明原因。
-- **高德的限流是并发限制**（`CUQPS_HAS_EXCEEDED_THE_LIMIT` 里的 CU 就是 concurrent）。
-  检索与算路都串行发出，并且各带退避重试 —— 被限流的代价很隐蔽：检索少一个关键词就少
-  一批候选，算路失败一段就多画一条假的直线。
+规划结合兴趣、旅行节奏、同行人群和抵离安排选择体验，不再限定每天几个景点。
+大型景区可以占一天，紧凑的城市漫步也可以包含多个短停点；慢游和亲子出行会保留更多休息空间。
+候选来自目标城市的实时地点搜索，重新规划时会替换上一份行程的地点与路线。
+
+模型完成排程后，服务端使用高德返回的主交通方式耗时再次检查相邻两站：
+**下一站开始时间 ≥ 上一站开始时间 + 完整停留时长 + 交通耗时 + 转场缓冲**。
+交通耗时由秒向上取整到分钟；默认缓冲 10 分钟，慢游、家庭或老人出行为 20 分钟。
+时长范围取上限，如「1—2 小时」按 2 小时校验。
+
+若当天后续有空档，系统会顺延冲突的到访时间，保留地点顺序与完整游览时长。
+顺延不能超过原定当天结束时间，也不会自动跨到第二天；涉及预约、抵离或开放时段的冲突不会擅自改时刻。
+不能可靠修复时，保留原时间，在每日摘要和警告中明确标记待调整，并在返回的 `scheduleCheck` 中记录原因和建议时刻。
+不会为了通过校验而缩短游览、凑景点或隐藏冲突。
+
+这个检查验证的是景点之间的时间衔接。它尚不验证实时营业时段、预约库存、用餐时间和机场接驳；
+停留时长无法解析、缺少路段或交通使用估算值时都会标记待确认。未来日期的交通状况仍可能变化。
 
 规划结果经 `sessionStorage`（key `trip-plan-v1`）交给行程页，读取时会校验版本、天数与
 `poiId` 是否可解析，不合格就整份丢弃并回退到内置行程。刷新行程页仍保持该行程；回首页
@@ -815,6 +840,11 @@ curl "https://你的域名/api/amap?p=/v3/weather/weatherInfo&city=420100&extens
 
 `node tools/check-data.js` 会检查引用完整性、坐标是否齐全、路线段是否配齐，
 并断言天数与配色数量一致。
+
+`npm run check` 会先检查项目源码和配置模板的 JavaScript 语法，再执行这项数据体检。
+它不访问数据库或外部 API，不读取本地私有配置；这不是登录、配额或分享功能的自动化测试。
+
+`npm test` 运行算路后时间校验的回归测试，覆盖时间顺延、连锁冲突、固定时刻、估算路段、深度游和跨午夜边界。
 
 > `data/app.db` 是迁移前的 SQLite 源库，已于 2026-09-19 停用。它现在有两个身份：
 > `database.sql` 的导出源、以及迁移的回退物 —— 所以**别删**，也仍然不入库。

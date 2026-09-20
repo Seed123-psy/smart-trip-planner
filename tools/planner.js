@@ -10,6 +10,7 @@
 const path = require('path');
 const { resolveDeepseekKey, resolveAmapServiceKey } = require('./keys');
 const { redact } = require('./http');
+const { reconcileSchedule } = require('./schedule-check');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/chat/completions';
@@ -111,6 +112,8 @@ function describeRequest(request) {
     pace: request.pace,
     budget: request.budget,
     interests: request.interests,
+    startPoint: request.startPoint,
+    endPoint: request.endPoint,
     notes: request.notes
   };
 }
@@ -322,7 +325,7 @@ function poiKind(type) {
 
 /**
  * 目录上限按天数放大。
- * 候选池必须比最终行程宽裕得多：筛选 Agent 要留下「每天 6—8 个」的备选，
+ * 候选池必须比最终行程宽裕得多：筛选 Agent 要留下不同区域、游览时长的备选，
  * 排程才有挑的余地。以前固定 80，7 天就只剩每天 11 个，
  * 一挤就出现「某天只剩一个景点」。同时给个上限，避免 14 天把提示词撑爆。
  */
@@ -370,14 +373,24 @@ async function discoverCatalog(request, config) {
   return items.slice(0, limit);
 }
 
+/** 筛选、排程和审校共用，避免审校把合理的深度游重新补成打卡游。 */
+function dailyCapacityPrompt() {
+  return [
+    '每天景点数量由可用时间决定，不设统一数量上下限，也不要求每天数量相同。',
+    '先确定当天可游览时段：优先采用用户明确的抵达、离开、早起晚出及夜游偏好；抵离日扣除接驳、入住、行李和提前到站时间。未提供具体时刻时使用保守假设并在 warnings 说明，不得把假设写成已知事实。',
+    '按游览停留 + 点间交通 + 用餐休息 + 排队及机动时间核算全天；下一站开始时间必须容纳上一站完整停留和转场，不能只保证时间递增。交通尚未实时算路时结合坐标保守估算，不得声称已验证。',
+    '慢节奏优先深度体验、少换区、多休息；均衡节奏兼顾核心体验与留白；紧凑节奏可以增加顺路短停，但不能压缩必要游览、用餐和交通时间。结合亲子、老人等出行人群及用户明确偏好调整。',
+    '大型博物馆、主题公园、徒步或远郊景区可以占半天乃至一天；同一区域的短停点可以安排更多。不要拆分同一景区或重复同类地点凑数。',
+    '只有在剩余时间足以覆盖往返交通、完整游览和缓冲，且符合兴趣时才补点；时间不足就删去低优先级地点或换到其他日期，不要靠缩短 stay 或延长到用户不愿活动的时段硬塞。',
+    '每天 summary 简要说明区域主线、主要时间分配与休息安排；合理的一两个深度体验不需要道歉。候选不足、开放时间不明或抵离时刻缺失等实际限制要如实说明，不编造闭馆或预约信息。'
+  ].join('\n');
+}
+
 function systemPrompt() {
   return [
     '你是旅行路线规划器。只能从本次高德实时搜索返回的 POI 目录中选择地点，不得创造新的 poiId。',
     '请根据日期、兴趣、预算和节奏安排可执行的多日行程，避免同一天跨城来回。',
-    // 密度必须写死。以前这里只字未提「每天几个点」，模型就在 1—5 个之间飘，
-    // 出现「某天只有一个景点」的行程；审校环节又只查「太挤」不查「太空」，补不回来。
-    '每个整天安排 4 到 6 个点。确实排不满（抵离日只有半天、候选里没有合适的）可以少，但必须在当天的 summary 里写明原因。',
-    '候选目录是备选池，宁可让每天多排一个顺路的点，也不要出现某天只有 1—2 个点。',
+    dailyCapacityPrompt(),
     '输出必须是 JSON，不要 Markdown，不要解释 JSON 之外的内容。',
     '每天 visits 按时间递增；每个 visit 必须有 poiId、time、title、desc、stay、mode。',
     'mode 只能是 driving、transit、walking。walking 只用于相邻且合理的近距离地点。',
@@ -389,9 +402,8 @@ function systemPrompt() {
 function selectionPrompt() {
   return [
     '你是景点筛选 Agent。目录来自高德对目标城市的实时搜索，只能从目录中选择 poiId，不得创造地点。',
-    // 以前的「每天 3 到 6 个」是候选池口径，但措辞含糊，实际卡在下限：
-    // 7 天只留 22 个候选，排程再怎么分也必然有某天只剩 1 个。
-    '为每天挑选 6 到 8 个候选（总量约为天数 × 7），宁多勿少：排程会从候选里再筛一遍，候选不够就会导致某天无点可排。',
+    dailyCapacityPrompt(),
+    '筛选阶段只建立备选池，不排最终日程：按天数、兴趣、可用时间与地域分布保留核心体验及顺路替代点，兼顾半日深度体验和短停选择，不按每天固定数量筛选。备选不等于必去，不要过早删光后几天或不同区域的可用地点。',
     '尽量保持区域集中，同一天相邻的点在地理上要顺路。',
     '按用户填的出行人群、风格偏好、时间安排和「更多偏好」来取舍。',
     '只输出 JSON：{"selectedPoiIds":["id"],"notes":["需要预约或存在不确定性的说明"]}'
@@ -410,10 +422,9 @@ function reviewPrompt() {
   return [
     '你是行程审校 Agent。逐天检查并修正：',
     '· 引用的 poiId 是否都在候选目录内；日期是否连续；时间是否递增；交通方式是否合理。',
-    '· 太挤：每天超过 6 个点要删到 6 个以内，优先删同类型里最次要的。',
-    // 只有上限没有下限，是之前「某天只剩一个景点」能一路通过审校的原因
-    '· 太空：某天不足 4 个点要从候选目录里补足到 4 个，补的点要与当天其它点顺路、且时间能塞得进递增序列。',
-    '抵离日等确实只能半天的，可以不足 4 个，但当天 summary 必须写明原因。',
+    dailyCapacityPrompt(),
+    '· 太挤按时间冲突判断，不按点数判断：检查停留、转场、用餐和缓冲是否超出可用时段，优先删除低优先级或绕路的体验。',
+    '· 太空按未被合理利用的时间判断：保留深度游、主动留白和必要休息；仅在有明显可用时间且存在符合兴趣的顺路候选时补点，禁止因点数少机械补齐。',
     '不得新增候选目录之外的地点。保留可执行的描述和 warnings。',
     '只输出完整的行程 JSON：{"days":[...],"warnings":[]}'
   ].join('\n');
@@ -1048,7 +1059,7 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
         if (!poiById[poiId]) return null;
         return {
           poiId,
-          time: /^\d{1,2}:\d{2}/.test(visit.time) ? visit.time : '10:00',
+          time: cleanText(visit.time, 40),
           title: cleanText(visit.title, 100) || poiById[poiId].name,
           desc: cleanText(visit.desc, 500),
           stay: cleanText(visit.stay, 40),
@@ -1088,6 +1099,8 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
     warnings.push(`有 ${routes.summary.estimatedLegs} 段路线没取到高德实时路径，按直线距离估算，出发前请再核对一次。`);
   }
 
+  const scheduleCheck = reconcileSchedule(safeDays, routes, request);
+
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -1100,7 +1113,8 @@ async function sanitizePlan(raw, request, allPoi, ctx = {}) {
     days: safeDays,
     poi,
     routes,
-    warnings: warnings.slice(0, 12),
+    scheduleCheck,
+    warnings: [...scheduleCheck.warnings, ...warnings],
     model: (await plannerConfig()).model
   };
 }
