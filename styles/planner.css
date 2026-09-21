@@ -95,16 +95,19 @@
 }
 
 .planner__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 13px;
 }
 
-/* 城市名比日期长，让它独占一行；剩下的两两成对：
-   开始/结束日期要挨着才好对比，节奏/预算同理。去掉天数输入框后
-   正好 5 项，不这样排会剩一个半空的格子。 */
+/* 城市名独占一行且不压缩；其余四字段两两成对，剩余空间不足时自动换行 */
 .planner__grid label:first-child {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
+}
+
+.planner__grid label:not(:first-child) {
+  flex: 1 1 calc(50% - 7px);
+  min-width: 0;
 }
 
 /* 天数提示：日期一变就重画，色块数量 = 行程天数 */
