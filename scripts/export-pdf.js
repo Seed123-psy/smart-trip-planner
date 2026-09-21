@@ -87,7 +87,6 @@
     const cityEl = document.getElementById('city');
     const cityName =
       (cityEl && cityEl.textContent.trim()) ||
-      (config().TRIP && config().TRIP.city) ||
       '行程';
 
     const city = el('h1', 'sheet__city', cityName);
@@ -246,6 +245,32 @@
     return grid.childElementCount ? section : null;
   }
 
+  /** 当地美食：按行程动线排列，与 food.js 同一套数据结构 */
+  function buildFood() {
+    const F = window.TRIP_FOOD || {};
+    const items = Array.isArray(F.items) ? F.items : [];
+    if (!items.length && !F.summary) return null;
+
+    const section = el('section', 'sheet__prep');
+    section.append(el('h2', null, '当地美食'));
+
+    if (F.summary) section.append(el('p', 'sheet__daysum', F.summary));
+
+    const list = el('ul', 'sheet__list');
+    items.forEach((item) => {
+      const li = el('li');
+      const main = el('span');
+      main.append(el('b', null, item.place || '行程沿线'));
+      if (item.dish) main.append(document.createTextNode(` · ${item.dish}`));
+      li.append(main);
+      if (item.near) li.append(el('span', 'sheet__note', item.near));
+      if (item.note) li.append(el('span', 'sheet__note', item.note));
+      list.append(li);
+    });
+    section.append(list);
+    return section;
+  }
+
   /* ------------------------------------------------------------------ */
 
   function buildSheet() {
@@ -261,6 +286,9 @@
 
     const prepSection = buildPrep();
     if (prepSection) sheet.append(prepSection);
+
+    const foodSection = buildFood();
+    if (foodSection) sheet.append(foodSection);
 
     document.body.append(sheet);
     return sheet;
